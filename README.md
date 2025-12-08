@@ -4,7 +4,7 @@
 
 DevLayers is a social platform designed for developers to maintain structured developer journals. It replaces scattered notes with organized **Learning Folders** and **Project Timelines**, allowing you to track your daily progress, maintain streaks, and build a public portfolio of your growth.
 
-![DevLayers Banner](/public/devlayers-icon-light-32x32.png)
+![DevLayers Banner](/public/devlayers-icon.png)
 
 ## ✨ Key Features
 
