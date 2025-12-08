@@ -37,7 +37,7 @@ Follow these steps to run the project locally.
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/yourusername/devlayers.git](https://github.com/yourusername/devlayers.git)
+   git clone [https://github.com/KunalBishwal/DevLayers.git](https://github.com/KunalBishwal/DevLayers)
    cd devlayers
 
 ### 📄 License
