@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { useUser } from "@/context/user-context" // 1. Import Context
-import { createPost, createPostInFolder } from "../../lib/api/create_api" // 2. Import API Actions
+import { useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation" // 1. Import useSearchParams
+import { useUser } from "@/context/user-context"
+import { createPost, createPostInFolder } from "../../lib/api/create_api"
 
 import { RichTextEditor } from "@/components/devlayers/rich-text-editor"
 import { PrivacyToggle } from "@/components/devlayers/privacy-toggle"
@@ -13,21 +13,25 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { ArrowLeft, Github, ImageIcon, LinkIcon, Save, Eye, X } from "lucide-react"
+import { ArrowLeft, Github, ImageIcon, Save, Eye, X, Loader2 } from "lucide-react"
 import Link from "next/link"
 
-export default function CreatePostPage() {
+// --- INTERNAL FORM COMPONENT ---
+function CreatePostForm() {
   const router = useRouter()
-  // Get real folders from context
+  const searchParams = useSearchParams() // 2. Get params
   const { folders, refreshUser } = useUser() 
+
+  // 3. Set default state based on URL param
+  const urlFolderId = searchParams.get("folderId")
+  const [selectedFolder, setSelectedFolder] = useState<string>(urlFolderId || "none")
 
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
-  const [selectedFolder, setSelectedFolder] = useState<string>("none") // Default to "none" for standalone
   const [day, setDay] = useState("")
   const [isPublic, setIsPublic] = useState(true)
   const [githubLink, setGithubLink] = useState("")
-  const [imgUrl, setImgUrl] = useState("") // Added state for API img_url
+  const [imgUrl, setImgUrl] = useState("") 
   const [showImgInput, setShowImgInput] = useState(false)
   
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -44,12 +48,9 @@ export default function CreatePostPage() {
 
     setIsSubmitting(true)
 
-    // Construct the payload matching the API structure
-    // Since API doesn't have 'tags' or 'github' fields, we can append them to content or title
-    // or just send what is supported. Here I'm sending supported fields.
     const payload = {
-        title: day ? `[Day ${day}] ${title}` : title, // embedding day in title
-        content: content + (githubLink ? `<br/><br/><strong>Repo:</strong> <a href="${githubLink}">${githubLink}</a>` : ""),
+        title: day ? `[Day ${day}] ${title}` : title,
+        content: content,
         visibility: isPublic ? "public" : "private" as "public" | "private",
         img_url: imgUrl || undefined
     }
@@ -57,17 +58,21 @@ export default function CreatePostPage() {
     try {
         let result;
 
+        // Check against string "none"
         if (selectedFolder && selectedFolder !== "none") {
-            // Endpoint: POST /folders/{id}/posts
             result = await createPostInFolder(token, selectedFolder, payload)
         } else {
-            // Endpoint: POST /posts
             result = await createPost(token, payload)
         }
 
         if (result) {
-            await refreshUser() // Update dashboard stats
-            router.push("/dashboard")
+            await refreshUser()
+            // Redirect back to the folder if one was selected, otherwise dashboard
+            if (selectedFolder !== "none") {
+                router.push(`/folder/${selectedFolder}`)
+            } else {
+                router.push("/dashboard")
+            }
         } else {
             alert("Failed to publish post.")
         }
@@ -89,7 +94,6 @@ export default function CreatePostPage() {
     setTags(tags.filter((t) => t !== tag))
   }
 
-  // Find selected folder name for preview
   const selectedFolderName = folders.find((f) => f.id.toString() === selectedFolder)?.name || "No folder selected"
 
   return (
@@ -115,7 +119,7 @@ export default function CreatePostPage() {
           </Button>
           <Button className="gap-2 glow-sm press-effect" onClick={handleSubmit} disabled={isSubmitting}>
             {isSubmitting ? (
-              <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Save className="w-4 h-4" />
             )}
@@ -136,7 +140,6 @@ export default function CreatePostPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No Folder (Standalone)</SelectItem>
-                {/* Map real folders from context */}
                 {folders.map((folder) => (
                   <SelectItem key={folder.id} value={folder.id.toString()}>
                     {folder.name}
@@ -181,7 +184,7 @@ export default function CreatePostPage() {
           />
         </div>
 
-        {/* Tags - (Visual only currently, as API doesn't support tags on posts yet) */}
+        {/* Tags */}
         <div className="space-y-2">
           <Label>Tags</Label>
           <div className="flex gap-2">
@@ -219,14 +222,12 @@ export default function CreatePostPage() {
               <ImageIcon className="w-4 h-4" />
               {showImgInput ? "Cancel Image" : "Add Image URL"}
             </Button>
-            {/* These are placeholders or could append to content */}
             <Button variant="outline" className="gap-2 h-10 bg-transparent">
               <Github className="w-4 h-4" />
               GitHub Link
             </Button>
           </div>
           
-          {/* Image URL Input (Only shows if button clicked) */}
           {showImgInput && (
              <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
                 <Label htmlFor="imgUrl">Image URL</Label>
@@ -240,7 +241,6 @@ export default function CreatePostPage() {
              </div>
           )}
 
-          {/* GitHub link input */}
           <div className="space-y-2">
              <Label htmlFor="ghLink">GitHub Repository (Optional)</Label>
             <Input
@@ -274,7 +274,6 @@ export default function CreatePostPage() {
           </DialogHeader>
 
           <div className="space-y-4 mt-4">
-            {/* Preview card */}
             <div className="rounded-xl border border-border bg-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 {day && (
@@ -317,20 +316,23 @@ export default function CreatePostPage() {
                   </a>
                 </div>
               )}
-
-              <div className="flex items-center gap-4 pt-4 mt-4 border-t border-border text-sm text-muted-foreground">
-                <span>0 likes</span>
-                <span>0 comments</span>
-                <span className="ml-auto">Just now</span>
-              </div>
             </div>
-
-            <p className="text-sm text-muted-foreground text-center">
-              This is how your post will appear to {isPublic ? "everyone" : "you"}.
-            </p>
           </div>
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// --- MAIN EXPORT WRAPPED IN SUSPENSE ---
+export default function CreatePostPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    }>
+      <CreatePostForm />
+    </Suspense>
   )
 }

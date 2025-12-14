@@ -18,11 +18,18 @@ export interface UpdateFolderData {
   tags?: string
 }
 
+export interface LinkItem {
+  label: string
+  url: string
+}
+
 export interface UpdatePostData {
   title?: string
   body?: string
   visibility?: "public" | "private"
-  tags?: string
+  tags?: string 
+  img_url?: string
+  links?: LinkItem[]
 }
 
 // --- UPDATE FUNCTIONS ---
@@ -87,13 +94,24 @@ export async function updateFolder(token: string, folderId: string | number, dat
  */
 export async function updatePost(token: string, postId: string | number, data: UpdatePostData) {
   try {
+    // --- FIX START: Payload Transformation ---
+    // Create a copy of the data
+    const payload: any = { ...data }
+
+    // Backend Schema likely expects 'content', so we map 'body' to 'content'
+    if (payload.body) {
+      payload.content = payload.body
+      delete payload.body // Remove 'body' to prevent confusion
+    }
+    // --- FIX END ---
+   
     const res = await fetch(`${API_BASE_URL}/posts/${postId}`, {
       method: "PATCH",
       headers: {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload), // Send the transformed payload
     })
 
     if (!res.ok) {

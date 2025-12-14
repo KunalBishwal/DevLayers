@@ -3,7 +3,7 @@
 import { cn } from "@/app/lib/utils"
 import { PostCard } from "./post-card"
 
-interface TimelinePost {
+export interface TimelinePost {
   id: string
   day: number
   title: string
@@ -16,30 +16,31 @@ interface TimelinePost {
   date: string
   likes?: number
   comments?: number
-  hasGithubLink?: boolean
+  // Updated fields
+  githubLink?: string
+  liveLink?: string
   hasImage?: boolean
   imageUrl?: string
   tags?: string[]
   isLiked?: boolean
   isBookmarked?: boolean
+  rawVisibility?: "public" | "private" 
 }
 
 interface TimelineProps {
   posts: TimelinePost[]
   className?: string
+  onEdit?: (post: TimelinePost) => void
 }
 
-export function Timeline({ posts, className }: TimelineProps) {
+export function Timeline({ posts, className, onEdit }: TimelineProps) {
   return (
     <div className={cn("relative", className)}>
-      {/* Timeline line - adjusted position */}
       <div className="absolute left-2 top-8 bottom-8 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-transparent" />
 
-      {/* Posts */}
       <div className="space-y-8 stagger-children">
-        {posts.map((post, index) => (
+        {posts.map((post) => (
           <div key={post.id} className="relative pl-8">
-            {/* Timeline dot - adjusted position to align with card */}
             <div
               className={cn(
                 "absolute left-0 top-8 w-4 h-4 rounded-full border-2 border-background",
@@ -48,8 +49,10 @@ export function Timeline({ posts, className }: TimelineProps) {
                 "z-10",
               )}
             />
-
-            <PostCard {...post} />
+            <PostCard 
+              {...post} 
+              onEdit={onEdit ? () => onEdit(post) : undefined}
+            />
           </div>
         ))}
       </div>
