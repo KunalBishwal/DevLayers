@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { Heart, MessageCircle, Share2, Bookmark, Github } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"

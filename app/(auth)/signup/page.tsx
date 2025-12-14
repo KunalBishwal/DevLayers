@@ -1,28 +1,66 @@
 "use client"
 
 import type React from "react"
-
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Logo } from "@/components/devlayers/logo"
 import { ThemeToggle } from "@/components/devlayers/theme-toggle"
-import { Github, ArrowRight, CheckCircle } from "lucide-react"
+import { Github, ArrowRight, CheckCircle, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+
+// Ideally, put this in a separate config file or strictly use env vars
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function SignupPage() {
+  const router = useRouter()
+  
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
-  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  
+  // UI States
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsLoading(false)
+    setError("") // Reset error state
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: name,
+          email: email,
+          password: password,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        // Handle backend errors (e.g., "Email already exists")
+        throw new Error(data.detail || "Registration failed. Please try again.")
+      }
+
+      // 1. Store the token
+      localStorage.setItem("token", data.access_token)
+
+      // 2. Redirect to dashboard or home
+      router.push("/dashboard") 
+
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const features = [
@@ -39,7 +77,7 @@ export default function SignupPage() {
       <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-primary/5 via-background to-accent/5 border-r border-border p-12">
         <div className="max-w-md space-y-8">
           <div>
-            <h2 className="text-3xl font-bold mb-4 text-balance">Start your developer documentation journey</h2>
+            <h2 className="text-3xl font-bold mb-4 text-balance">Start your documentation journey ;)</h2>
             <p className="text-muted-foreground">
               Create structured folders, track daily progress, and share your learning with the world.
             </p>
@@ -56,29 +94,6 @@ export default function SignupPage() {
                 <span className="text-sm">{feature}</span>
               </div>
             ))}
-          </div>
-
-          {/* Visual folder preview */}
-          <div className="p-6 rounded-xl bg-card border border-border mt-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <p className="font-medium">Learning TypeScript</p>
-                <p className="text-xs text-muted-foreground">Day 23 of 100</p>
-              </div>
-            </div>
-            <div className="h-2 bg-secondary rounded-full overflow-hidden">
-              <div className="h-full w-[23%] bg-primary rounded-full" />
-            </div>
           </div>
         </div>
       </div>
@@ -100,11 +115,11 @@ export default function SignupPage() {
 
           {/* OAuth buttons */}
           <div className="space-y-3">
-            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent">
+            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent" disabled>
               <Github className="w-5 h-5" />
-              Sign up with GitHub
+              Sign up with GitHub (Soon)
             </Button>
-            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent">
+            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent" disabled>
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
@@ -123,7 +138,7 @@ export default function SignupPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Sign up with Google
+              Sign up with Google (Soon)
             </Button>
           </div>
 
@@ -136,33 +151,20 @@ export default function SignupPage() {
             </div>
           </div>
 
-          {/* Email form - Updated placeholder with Indian name */}
+          {/* Email form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
-                  placeholder="Rahul Verma"
+                  placeholder="Your Name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="h-11"
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  placeholder="rahulverma"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="h-11"
-                  required
-                />
-              </div>
-            </div>
-
+        
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -187,8 +189,16 @@ export default function SignupPage() {
                 className="h-11"
                 required
               />
-              <p className="text-xs text-muted-foreground">Must be at least 8 characters with a number and symbol</p>
+              <p className="text-xs text-muted-foreground">Must be at least 8 characters</p>
             </div>
+
+            {/* Error Message Display */}
+            {error && (
+              <div className="p-3 text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-md flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
 
             <Button type="submit" className="w-full h-11 gap-2 glow-sm press-effect" disabled={isLoading}>
               {isLoading ? (

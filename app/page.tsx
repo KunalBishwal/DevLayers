@@ -40,7 +40,7 @@ export default function LandingPage() {
               <div className="flex flex-wrap items-center gap-4">
                 <Link href="/signup">
                   <Button size="lg" className="gap-2 h-12 px-6 glow-primary press-effect">
-                    Get Started Free
+                    Get Started
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>

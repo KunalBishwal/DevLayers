@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { FolderCard } from "@/components/devlayers/folder-card"
 import { PostCard } from "@/components/devlayers/post-card"
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { Search, TrendingUp, Clock, X, FolderOpen, FileText, Users, Hash } from "lucide-react"
 import Link from "next/link"
 

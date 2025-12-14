@@ -1,5 +1,10 @@
 "use client"
 
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { useUser } from "@/context/user-context" // 1. Import Context
+import { createPost, createPostInFolder } from "../../lib/api/create_api" // 2. Import API Actions
+
 import { RichTextEditor } from "@/components/devlayers/rich-text-editor"
 import { PrivacyToggle } from "@/components/devlayers/privacy-toggle"
 import { Button } from "@/components/ui/button"
@@ -10,30 +15,67 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ArrowLeft, Github, ImageIcon, LinkIcon, Save, Eye, X } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
-
-const mockFolders = [
-  { id: "1", title: "Learning React" },
-  { id: "2", title: "Fintech SaaS Project" },
-  { id: "3", title: "Rust Journey" },
-]
 
 export default function CreatePostPage() {
+  const router = useRouter()
+  // Get real folders from context
+  const { folders, refreshUser } = useUser() 
+
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
-  const [selectedFolder, setSelectedFolder] = useState("")
+  const [selectedFolder, setSelectedFolder] = useState<string>("none") // Default to "none" for standalone
   const [day, setDay] = useState("")
   const [isPublic, setIsPublic] = useState(true)
   const [githubLink, setGithubLink] = useState("")
+  const [imgUrl, setImgUrl] = useState("") // Added state for API img_url
+  const [showImgInput, setShowImgInput] = useState(false)
+  
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState("")
   const [showPreview, setShowPreview] = useState(false)
 
   const handleSubmit = async () => {
+    const token = localStorage.getItem("token")
+    if (!token || !title.trim() || !content.trim()) {
+        alert("Please fill in the title and content.")
+        return
+    }
+
     setIsSubmitting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsSubmitting(false)
+
+    // Construct the payload matching the API structure
+    // Since API doesn't have 'tags' or 'github' fields, we can append them to content or title
+    // or just send what is supported. Here I'm sending supported fields.
+    const payload = {
+        title: day ? `[Day ${day}] ${title}` : title, // embedding day in title
+        content: content + (githubLink ? `<br/><br/><strong>Repo:</strong> <a href="${githubLink}">${githubLink}</a>` : ""),
+        visibility: isPublic ? "public" : "private" as "public" | "private",
+        img_url: imgUrl || undefined
+    }
+
+    try {
+        let result;
+
+        if (selectedFolder && selectedFolder !== "none") {
+            // Endpoint: POST /folders/{id}/posts
+            result = await createPostInFolder(token, selectedFolder, payload)
+        } else {
+            // Endpoint: POST /posts
+            result = await createPost(token, payload)
+        }
+
+        if (result) {
+            await refreshUser() // Update dashboard stats
+            router.push("/dashboard")
+        } else {
+            alert("Failed to publish post.")
+        }
+    } catch (error) {
+        console.error("Publishing error", error)
+    } finally {
+        setIsSubmitting(false)
+    }
   }
 
   const addTag = () => {
@@ -47,7 +89,8 @@ export default function CreatePostPage() {
     setTags(tags.filter((t) => t !== tag))
   }
 
-  const selectedFolderName = mockFolders.find((f) => f.id === selectedFolder)?.title || "No folder selected"
+  // Find selected folder name for preview
+  const selectedFolderName = folders.find((f) => f.id.toString() === selectedFolder)?.name || "No folder selected"
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-8">
@@ -86,15 +129,17 @@ export default function CreatePostPage() {
         {/* Folder & Day selection */}
         <div className="grid md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>Folder</Label>
+            <Label>Folder (Optional)</Label>
             <Select value={selectedFolder} onValueChange={setSelectedFolder}>
               <SelectTrigger className="h-11">
                 <SelectValue placeholder="Select a folder" />
               </SelectTrigger>
               <SelectContent>
-                {mockFolders.map((folder) => (
-                  <SelectItem key={folder.id} value={folder.id}>
-                    {folder.title}
+                <SelectItem value="none">No Folder (Standalone)</SelectItem>
+                {/* Map real folders from context */}
+                {folders.map((folder) => (
+                  <SelectItem key={folder.id} value={folder.id.toString()}>
+                    {folder.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -102,11 +147,11 @@ export default function CreatePostPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="day">Day Number</Label>
+            <Label htmlFor="day">Day Number (Optional)</Label>
             <Input
               id="day"
               type="number"
-              placeholder="24"
+              placeholder="e.g. 24"
               value={day}
               onChange={(e) => setDay(e.target.value)}
               className="h-11"
@@ -116,7 +161,7 @@ export default function CreatePostPage() {
 
         {/* Title */}
         <div className="space-y-2">
-          <Label htmlFor="title">Title</Label>
+          <Label htmlFor="title">Title <span className="text-red-500">*</span></Label>
           <Input
             id="title"
             placeholder="What did you learn or build today?"
@@ -128,7 +173,7 @@ export default function CreatePostPage() {
 
         {/* Content editor */}
         <div className="space-y-2">
-          <Label>Content</Label>
+          <Label>Content <span className="text-red-500">*</span></Label>
           <RichTextEditor
             value={content}
             onChange={setContent}
@@ -136,7 +181,7 @@ export default function CreatePostPage() {
           />
         </div>
 
-        {/* Tags */}
+        {/* Tags - (Visual only currently, as API doesn't support tags on posts yet) */}
         <div className="space-y-2">
           <Label>Tags</Label>
           <div className="flex gap-2">
@@ -170,28 +215,42 @@ export default function CreatePostPage() {
           <Label>Attachments</Label>
 
           <div className="flex flex-wrap gap-3">
+            <Button variant="outline" className="gap-2 h-10 bg-transparent" onClick={() => setShowImgInput(!showImgInput)}>
+              <ImageIcon className="w-4 h-4" />
+              {showImgInput ? "Cancel Image" : "Add Image URL"}
+            </Button>
+            {/* These are placeholders or could append to content */}
             <Button variant="outline" className="gap-2 h-10 bg-transparent">
               <Github className="w-4 h-4" />
-              Add GitHub Link
-            </Button>
-            <Button variant="outline" className="gap-2 h-10 bg-transparent">
-              <ImageIcon className="w-4 h-4" />
-              Add Image
-            </Button>
-            <Button variant="outline" className="gap-2 h-10 bg-transparent">
-              <LinkIcon className="w-4 h-4" />
-              Add Link
+              GitHub Link
             </Button>
           </div>
+          
+          {/* Image URL Input (Only shows if button clicked) */}
+          {showImgInput && (
+             <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                <Label htmlFor="imgUrl">Image URL</Label>
+                <Input
+                  id="imgUrl"
+                  placeholder="https://example.com/image.png"
+                  value={imgUrl}
+                  onChange={(e) => setImgUrl(e.target.value)}
+                  className="h-10"
+                />
+             </div>
+          )}
 
           {/* GitHub link input */}
           <div className="space-y-2">
+             <Label htmlFor="ghLink">GitHub Repository (Optional)</Label>
             <Input
+              id="ghLink"
               placeholder="https://github.com/username/repo"
               value={githubLink}
               onChange={(e) => setGithubLink(e.target.value)}
               className="h-10"
             />
+            <p className="text-xs text-muted-foreground">Will be appended to the bottom of your post.</p>
           </div>
         </div>
 
@@ -207,6 +266,7 @@ export default function CreatePostPage() {
         </div>
       </div>
 
+      {/* Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -217,9 +277,11 @@ export default function CreatePostPage() {
             {/* Preview card */}
             <div className="rounded-xl border border-border bg-card p-5">
               <div className="flex items-center gap-2 mb-4">
-                <Badge variant="outline" className="bg-background border-primary/30 text-primary font-mono text-xs">
-                  Day {day || "?"}
-                </Badge>
+                {day && (
+                    <Badge variant="outline" className="bg-background border-primary/30 text-primary font-mono text-xs">
+                    Day {day}
+                    </Badge>
+                )}
                 <span className="text-sm text-muted-foreground">in {selectedFolderName}</span>
                 <Badge variant="secondary" className="ml-auto">
                   {isPublic ? "Public" : "Private"}
@@ -227,8 +289,15 @@ export default function CreatePostPage() {
               </div>
 
               <h2 className="text-xl font-bold mb-3">{title || "Untitled Post"}</h2>
+              
+              {imgUrl && (
+                  <img src={imgUrl} alt="Post cover" className="w-full h-48 object-cover rounded-md mb-4" />
+              )}
 
-              <div className="text-muted-foreground leading-relaxed mb-4">{content || "No content yet..."}</div>
+              <div 
+                className="text-muted-foreground leading-relaxed mb-4 prose dark:prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: content }} 
+              />
 
               {tags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
@@ -243,7 +312,9 @@ export default function CreatePostPage() {
               {githubLink && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-secondary">
                   <Github className="w-4 h-4" />
-                  <span className="truncate">{githubLink}</span>
+                  <a href={githubLink} target="_blank" rel="noreferrer" className="truncate hover:underline text-primary">
+                    {githubLink}
+                  </a>
                 </div>
               )}
 

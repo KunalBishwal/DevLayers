@@ -1,6 +1,6 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { Logo } from "./logo"
 import { ThemeToggle } from "./theme-toggle"
 import { Button } from "@/components/ui/button"
@@ -37,9 +37,6 @@ export function NavHeader({ variant = "landing", className }: NavHeaderProps) {
             </Link>
             <Link href="/features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Features
-            </Link>
-            <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Pricing
             </Link>
             <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Docs

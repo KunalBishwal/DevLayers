@@ -1,6 +1,6 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { FileText, BookOpen, GraduationCap, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 

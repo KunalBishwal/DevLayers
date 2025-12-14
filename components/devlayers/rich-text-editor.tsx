@@ -1,6 +1,6 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { Bold, Italic, Code, Link, ImageIcon, List, ListOrdered, Quote, Heading1, Heading2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"

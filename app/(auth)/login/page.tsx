@@ -1,27 +1,66 @@
 "use client"
 
 import type React from "react"
-
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Logo } from "@/components/devlayers/logo"
 import { ThemeToggle } from "@/components/devlayers/theme-toggle"
-import { Github, ArrowRight, Sparkles } from "lucide-react"
+import { Github, ArrowRight, Sparkles, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useState } from "react"
+import { useRouter } from "next/navigation" // Import useRouter
+
+// Define the API Base URL (same as used in SignupPage)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function LoginPage() {
+  const router = useRouter()
+  
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  
+  // UI States
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsLoading(false)
+    setError("") // Reset error state
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/signin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        // Handle backend errors (e.g., "Invalid credentials")
+        // FastAPI typically returns { "detail": "..." } on failure
+        throw new Error(data.detail || "Sign-in failed. Please check your credentials.")
+      }
+
+      // 1. Store the token
+      localStorage.setItem("token", data.access_token)
+      
+      // 2. Redirect to dashboard or home
+      router.push("/dashboard") 
+
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -43,11 +82,11 @@ export default function LoginPage() {
 
           {/* OAuth buttons */}
           <div className="space-y-3">
-            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent">
+            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent" disabled>
               <Github className="w-5 h-5" />
               Continue with GitHub
             </Button>
-            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent">
+            <Button variant="outline" className="w-full h-11 gap-3 press-effect bg-transparent" disabled>
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
@@ -111,6 +150,14 @@ export default function LoginPage() {
                 required
               />
             </div>
+            
+            {/* Error Message Display */}
+            {error && (
+              <div className="p-3 text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-md flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
 
             <Button type="submit" className="w-full h-11 gap-2 glow-sm press-effect" disabled={isLoading}>
               {isLoading ? (
@@ -133,7 +180,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right side - Visual - Updated with Indian name */}
+      {/* Right side - Visual */}
       <div className="hidden lg:flex flex-1 items-center justify-center bg-gradient-to-br from-primary/5 via-background to-accent/5 border-l border-border p-12">
         <div className="max-w-md space-y-6 text-center">
           <div className="w-24 h-24 mx-auto rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
@@ -144,7 +191,7 @@ export default function LoginPage() {
             Join developers who track their learning journeys and share insights with others.
           </p>
 
-          {/* Testimonial - Updated with Indian name */}
+          {/* Testimonial */}
           <div className="p-6 rounded-xl bg-card border border-border mt-8">
             <p className="text-sm italic mb-4">
               "DevLayers changed how I approach learning. Seeing my progress laid out day by day keeps me motivated and

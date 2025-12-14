@@ -1,6 +1,6 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { Sparkles, Trophy, Target, Zap, Star, Award } from "lucide-react"
 
 interface AchievementBadgeProps {

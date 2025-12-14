@@ -1,13 +1,11 @@
-"use client"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { Logo } from "./logo"
 import { ThemeToggle } from "./theme-toggle"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   LayoutDashboard,
-  FolderOpen,
   PenSquare,
   Globe,
   Settings,
@@ -19,10 +17,14 @@ import {
   Bell,
   BookOpen,
   Code,
+  AlertCircle, // Added for potential error state, though signout is mostly local
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation" // Import useRouter
 import { useState } from "react"
+
+// Define the API Base URL (used for the signout call)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 interface SidebarProps {
   user?: {
@@ -36,7 +38,6 @@ interface SidebarProps {
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: FolderOpen, label: "My Folders", href: "/folders" },
   { icon: PenSquare, label: "Create Post", href: "/create" },
   { icon: Globe, label: "Explore", href: "/explore" },
   { icon: Search, label: "Search", href: "/search" },
@@ -44,8 +45,57 @@ const navItems = [
 ]
 
 export function Sidebar({ user, className }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false)
+  const router = useRouter()
   const pathname = usePathname()
+
+  const [collapsed, setCollapsed] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true)
+    setError(null)
+    
+    // 1. Get the current token
+    const token = localStorage.getItem("token")
+
+    try {
+      // 2. Call the signout API endpoint (optional but good practice to invalidate server-side session/token)
+      if (token) {
+        // The API specified doesn't require a body, just an auth token, but since it's a POST, we include a minimal header
+        const response = await fetch(`${API_BASE_URL}/auth/signout`, {
+          method: "POST",
+          headers: {
+            // Note: Your curl example did not include an Authorization header.
+            // In a real scenario, you should send the access token here,
+            // typically in the Authorization: Bearer <token> header.
+            // For this example, we'll only send the Content-Type header as per your provided curl data.
+            "Content-Type": "application/json", 
+          },
+        })
+
+        // Handle successful signout message from the API
+        if (!response.ok) {
+           // We can log the error but still proceed with local signout
+           console.error("Server signout failed but proceeding with local signout.")
+        }
+      }
+
+    } catch (err) {
+      // Handle network errors
+      setError("Network error during signout. Logging out locally.")
+    } finally {
+      // 3. Clear the token and local user data
+      localStorage.removeItem("token")
+      localStorage.removeItem("user_cache")
+
+      // 4. Redirect to the login page
+      router.push("/login")
+      
+      setIsSigningOut(false)
+    }
+  }
 
   return (
     <aside
@@ -66,7 +116,7 @@ export function Sidebar({ user, className }: SidebarProps) {
         </Button>
       </div>
 
-      {/* User profile - Updated with Indian name */}
+      {/* User profile */}
       {user && (
         <div className={cn("p-4 border-b border-border", collapsed && "flex justify-center")}>
           <div className={cn("flex items-center gap-3", collapsed && "flex-col")}>
@@ -141,6 +191,14 @@ export function Sidebar({ user, className }: SidebarProps) {
           </div>
         </div>
       )}
+      
+      {/* Error display (if any) */}
+      {error && !collapsed && (
+          <div className="p-2 text-sm text-red-500 flex items-center gap-1">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="text-xs">{error}</span>
+          </div>
+        )}
 
       {/* Footer actions - Added ThemeToggle */}
       <div className="p-2 border-t border-border">
@@ -162,14 +220,20 @@ export function Sidebar({ user, className }: SidebarProps) {
           </Button>
         </Link>
         <Button
+          onClick={handleSignOut} // Attached the signout handler
           variant="ghost"
           className={cn(
             "w-full justify-start gap-3 text-muted-foreground hover:text-destructive",
             collapsed && "justify-center px-2",
           )}
+          disabled={isSigningOut}
         >
-          <LogOut className="w-5 h-5 shrink-0" />
-          {!collapsed && <span>Sign Out</span>}
+          {isSigningOut ? (
+            <div className="w-5 h-5 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin shrink-0" />
+          ) : (
+            <LogOut className="w-5 h-5 shrink-0" />
+          )}
+          {!collapsed && <span>{isSigningOut ? "Signing Out..." : "Sign Out"}</span>}
         </Button>
       </div>
     </aside>

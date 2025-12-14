@@ -1,6 +1,6 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/app/lib/utils"
 import { Plus } from "lucide-react"
 
 interface CreateFolderCardProps {
@@ -14,7 +14,7 @@ export function CreateFolderCard({ className, onClick }: CreateFolderCardProps) 
       onClick={onClick}
       className={cn(
         "group relative rounded-xl border-2 border-dashed border-border p-5",
-        "flex flex-col items-center justify-center gap-3 min-h-[200px]",
+        "flex flex-col items-center justify-center gap-3 ",
         "transition-all duration-200 ease-out cursor-pointer",
         "hover:border-primary/50 hover:bg-primary/5",
         "active:scale-[0.98]",
