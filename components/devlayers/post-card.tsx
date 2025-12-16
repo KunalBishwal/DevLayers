@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState } from "react"
 import { cn } from "@/app/lib/utils"
-import { Heart, MessageCircle, Share2, Bookmark, Github, MoreHorizontal, Pencil, ExternalLink } from "lucide-react"
+import { Heart, MessageCircle, Share2, Bookmark, Github, MoreHorizontal, Pencil, ExternalLink, Trash2 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -43,6 +43,7 @@ interface PostCardProps {
   showDayBadge?: boolean
   onClick?: () => void
   onEdit?: () => void
+  onDelete?: () => void
 }
 
 export function PostCard({
@@ -62,6 +63,7 @@ export function PostCard({
   className,
   onClick,
   onEdit,
+  onDelete,
   showDayBadge = true,
 }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(initialIsLiked)
@@ -120,6 +122,11 @@ export function PostCard({
                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit() }}>
                   <Pencil className="mr-2 h-4 w-4" /> Edit Post
                 </DropdownMenuItem>
+                {onDelete && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete() }} className="text-destructive">
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete Post
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

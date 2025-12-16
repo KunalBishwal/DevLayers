@@ -3,18 +3,21 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/context/user-context"
-import { createFolder, createSocialLink } from "../../lib/api/create_api"
-import { updateUserProfile, updateFolder } from "../../lib/api/update_api"
 import { cn } from "@/app/lib/utils"
 
-// Icons
+// --- API Imports ---
+import { createFolder, createSocialLink } from "../../lib/api/create_api"
+import { updateUserProfile, updateFolder } from "../../lib/api/update_api"
+import { delete_folder } from "../../lib/api/delete_api" 
+
+// --- Icons ---
 import {
   Grid3X3, List, Plus, User, Link as LinkIcon, Mail, Loader2,
   Globe, Lock, Github, Linkedin, Twitter, ExternalLink,
-  Settings, Camera
+  Settings, Camera, Trash2, AlertTriangle
 } from "lucide-react"
 
-// Components
+// --- Components ---
 import { FolderCard } from "@/components/devlayers/folder-card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,13 +25,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ConfirmModal } from "@/components/devlayers/delete_confirmation_widget" 
 
 export default function DashboardPage() {
   const router = useRouter()
   const { user, folders, socialLinks, isLoading, refreshUser } = useUser()
 
   const [view, setView] = useState<"grid" | "list">("grid")
-  const [activeTab, setActiveTab] = useState("all") // State for filtering
+  const [activeTab, setActiveTab] = useState("all") 
 
   // --- Create Folder States ---
   const [showCreateFolder, setShowCreateFolder] = useState(false)
@@ -45,6 +49,10 @@ export default function DashboardPage() {
   const [editFolderTitle, setEditFolderTitle] = useState("")
   const [editFolderDesc, setEditFolderDesc] = useState("")
   const [editFolderVisibility, setEditFolderVisibility] = useState<"public" | "private">("public")
+
+  // --- DELETE Folder States ---
+  const [deleteFolderId, setDeleteFolderId] = useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // --- Edit Profile States ---
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -82,11 +90,35 @@ export default function DashboardPage() {
 
   // --- HANDLERS ---
 
-  const openEditProfile = () => {
-    setEditName(user.name)
-    setEditBio(user.bio || "")
-    setEditPhotoUrl(user.profile_photo_url || "")
-    setShowEditProfile(true)
+  // Open the Edit Dialog
+  const openEditFolder = (e: React.MouseEvent, folder: any) => {
+    e.stopPropagation() // Prevent navigation when clicking settings
+    setEditingFolderId(folder.id.toString())
+    setEditFolderTitle(folder.name)
+    setEditFolderDesc(folder.description || "")
+    setEditFolderVisibility(folder.visibility)
+    setShowEditFolder(true)
+  }
+
+  // Handle Deletion Confirmation
+  const handleConfirmDelete = async () => {
+    if (!deleteFolderId) return
+    const token = localStorage.getItem("token")
+    if (!token) return
+
+    setIsDeleting(true)
+    try {
+      const result = await delete_folder(token, deleteFolderId)
+      if (result) {
+        await refreshUser()
+        setDeleteFolderId(null)
+        setShowEditFolder(false) // Close the edit dialog if it was open
+      }
+    } catch (error) {
+      console.error("Delete failed", error)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handleUpdateProfile = async () => {
@@ -103,19 +135,10 @@ export default function DashboardPage() {
       await refreshUser()
       setShowEditProfile(false)
     } catch (error: any) {
-      console.error("Profile update failed", error)
       alert(error.message || "Failed to update profile")
     } finally {
       setIsUpdatingProfile(false)
     }
-  }
-
-  const openEditFolder = (folder: any) => {
-    setEditingFolderId(folder.id.toString())
-    setEditFolderTitle(folder.name)
-    setEditFolderDesc(folder.description || "")
-    setEditFolderVisibility(folder.visibility)
-    setShowEditFolder(true)
   }
 
   const handleUpdateFolder = async () => {
@@ -132,7 +155,6 @@ export default function DashboardPage() {
       await refreshUser()
       setShowEditFolder(false)
     } catch (error: any) {
-      console.error("Folder update failed", error)
       alert(error.message || "Failed to update folder")
     } finally {
       setIsUpdatingFolder(false)
@@ -182,6 +204,14 @@ export default function DashboardPage() {
     } finally {
       setIsAddingLink(false)
     }
+  }
+
+  // Helper to open profile edit
+  const openEditProfile = () => {
+    setEditName(user.name)
+    setEditBio(user.bio || "")
+    setEditPhotoUrl(user.profile_photo_url || "")
+    setShowEditProfile(true)
   }
 
   return (
@@ -322,19 +352,40 @@ export default function DashboardPage() {
         ) : (
           <div className={view === "grid" ? "grid md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}>
             {filteredFolders.map((folder) => (
-              <FolderCard
-                key={folder.id}
-                id={folder.id.toString()}
-                title={folder.name}
-                description={folder.description}
-                isPublic={folder.visibility === "public"}
-                onClick={() => router.push(`/folders/${folder.id}`)}
-                onEdit={() => openEditFolder(folder)}
-              />
+              <div key={folder.id} className="relative group">
+                <FolderCard
+                  id={folder.id.toString()}
+                  title={folder.name}
+                  description={folder.description}
+                  isPublic={folder.visibility === "public"}
+                  onClick={() => router.push(`/folders/${folder.id}`)}
+                />
+                
+                {/* SETTINGS BUTTON ON CARD (Triggers Edit Modal) */}
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="absolute top-10 right-1 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-sm border border-border bg-background/10 backdrop-blur-sm"
+                  onClick={(e) => openEditFolder(e, folder)}
+                >
+                  <Settings className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* --- CONFIRM DELETE MODAL --- */}
+      <ConfirmModal
+        isOpen={!!deleteFolderId}
+        onClose={() => setDeleteFolderId(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+        title="Delete Workspace?"
+        description="This will permanently delete this folder and all contents within it. This action cannot be undone."
+        confirmText="Yes, delete it"
+      />
 
       {/* --- DIALOG: CREATE FOLDER --- */}
       <Dialog open={showCreateFolder} onOpenChange={setShowCreateFolder}>
@@ -367,14 +418,16 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* --- DIALOG: EDIT FOLDER --- */}
+      {/* --- DIALOG: EDIT FOLDER (WITH DELETE OPTION) --- */}
       <Dialog open={showEditFolder} onOpenChange={setShowEditFolder}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Workspace</DialogTitle>
-            <DialogDescription>Update your folder details.</DialogDescription>
+            <DialogDescription>Update settings or delete this workspace.</DialogDescription>
           </DialogHeader>
+          
           <div className="space-y-4 py-4">
+            {/* Standard Edit Fields */}
             <div className="space-y-2">
               <Label>Name</Label>
               <Input value={editFolderTitle} onChange={(e) => setEditFolderTitle(e.target.value)} />
@@ -394,8 +447,33 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+
+            {/* DANGER ZONE */}
+            <div className="pt-6 mt-4 border-t border-border">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-destructive flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> Danger Zone
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Deleting this folder will remove all files inside.
+                  </p>
+                </div>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => {
+                    if (editingFolderId) setDeleteFolderId(Number(editingFolderId))
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="ghost" onClick={() => setShowEditFolder(false)}>Cancel</Button>
             <Button onClick={handleUpdateFolder} disabled={!editFolderTitle.trim() || isUpdatingFolder}>
               {isUpdatingFolder && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
@@ -422,7 +500,6 @@ export default function DashboardPage() {
                  value={editPhotoUrl} 
                  onChange={(e) => setEditPhotoUrl(e.target.value)} 
               />
-              <p className="text-xs text-muted-foreground">Paste a direct link to a JPG or PNG image.</p>
             </div>
             <div className="space-y-2">
               <Label>Bio</Label>

@@ -30,14 +30,32 @@ export interface Folder {
 export interface APIPost {
   id: number
   title: string
-  body: string         // API uses 'body', UI uses 'content'
+  body: string
   visibility: "public" | "private"
   author_id: number
   folder_id: number | null
-  images: { id: number; url: string }[]
-  links: { id: number; url: string }[]
+  // Added missing fields:
+  tags: string | null
   created_at: string
+  updated_at: string
+  // Adjusted images/links structure if needed (ensure these match exactly)
+  images: { 
+    id: number
+    url: string 
+  }[]
+  links: { 
+    id: number
+    label: string  // Backend usually sends a label for links
+    url: string 
+  }[]
 }
+
+
+
+
+
+
+
 
 // --- FETCH FUNCTIONS ---
 
@@ -97,6 +115,23 @@ export async function getFolderPosts(token: string, folderId: string): Promise<A
     
   } catch (error) {
     console.error("Fetch posts error:", error)
+    return []
+  }
+}
+
+
+
+
+
+//to get users all posts in one call
+export async function fetchUserPosts(token: string): Promise<APIPost[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/posts/user/all`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    return res.ok ? await res.json() : []
+  } catch (error) {
+    console.error("Posts fetch error:", error)
     return []
   }
 }

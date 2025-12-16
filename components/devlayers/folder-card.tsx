@@ -79,10 +79,6 @@ export function FolderCard({
           {description || "No items inside"}
         </p>
 
-        {/* Finder-style action */}
-        <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-          <MoreHorizontal className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-        </div>
       </div>
     </div>
   )

@@ -17,11 +17,14 @@ import {
   Bell,
   BookOpen,
   Code,
-  AlertCircle, // Added for potential error state, though signout is mostly local
+  AlertCircle,
+  NewspaperIcon,
+  Folder, // Added for potential error state, though signout is mostly local
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation" // Import useRouter
 import { useState } from "react"
+import { useUser } from "@/context/user-context"
 
 // Define the API Base URL (used for the signout call)
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -38,10 +41,12 @@ interface SidebarProps {
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+  {icon:NewspaperIcon,label:"My Posts",href:"/all_posts"},
   { icon: PenSquare, label: "Create Post", href: "/create" },
   { icon: Globe, label: "Explore", href: "/explore" },
   { icon: Search, label: "Search", href: "/search" },
   { icon: Bell, label: "Notifications", href: "/notifications" },
+  
 ]
 
 export function Sidebar({ user, className }: SidebarProps) {
@@ -51,6 +56,9 @@ export function Sidebar({ user, className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  //recent folder
+  const {folders} = useUser()
 
 
   const handleSignOut = async () => {
@@ -178,19 +186,31 @@ export function Sidebar({ user, className }: SidebarProps) {
       {/* Quick folder access */}
       {!collapsed && (
         <div className="p-4 border-t border-border">
-          <p className="text-xs font-medium text-muted-foreground mb-2 px-2">RECENT FOLDERS</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2 px-2">
+            RECENT FOLDERS
+          </p>
+
           <div className="space-y-1">
-            <Button variant="ghost" className="w-full justify-start gap-2 h-9 text-sm">
-              <BookOpen className="w-4 h-4 text-primary" />
-              <span className="truncate">Learning React</span>
-            </Button>
-            <Button variant="ghost" className="w-full justify-start gap-2 h-9 text-sm">
-              <Code className="w-4 h-4 text-accent" />
-              <span className="truncate">Fintech SaaS</span>
-            </Button>
+            {folders && folders.length > 0 ? (
+              folders.slice(0, 2).map((folder) => (
+                <Button
+                  key={folder.id}
+                  variant="ghost"
+                  className="w-full justify-start gap-2 h-9 text-sm"
+                >
+                  <Folder className="w-4 h-4 text-primary" />
+                  <span className="truncate">{folder.name}</span>
+                </Button>
+              ))
+            ) : (
+              <div className="text-xs text-muted-foreground italic px-2">
+                No recent folders.
+              </div>
+            )}
           </div>
         </div>
       )}
+
       
       {/* Error display (if any) */}
       {error && !collapsed && (

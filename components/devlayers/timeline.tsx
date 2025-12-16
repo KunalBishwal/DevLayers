@@ -31,9 +31,10 @@ interface TimelineProps {
   posts: TimelinePost[]
   className?: string
   onEdit?: (post: TimelinePost) => void
+  onDelete?: (postId: string) => void
 }
 
-export function Timeline({ posts, className, onEdit }: TimelineProps) {
+export function Timeline({ posts, className, onEdit, onDelete }: TimelineProps) {
   return (
     <div className={cn("relative", className)}>
       <div className="absolute left-2 top-8 bottom-8 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-transparent" />
@@ -52,6 +53,7 @@ export function Timeline({ posts, className, onEdit }: TimelineProps) {
             <PostCard 
               {...post} 
               onEdit={onEdit ? () => onEdit(post) : undefined}
+              onDelete={onDelete ? () => onDelete(post.id.toString()) : undefined}
             />
           </div>
         ))}
