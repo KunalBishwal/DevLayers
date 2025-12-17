@@ -101,7 +101,7 @@ export async function fetchUserFolders(userId: number, token: string): Promise<F
 
 
 
-// 2. Get Posts inside a Folder
+// 2. Get Posts inside a Folder(secured endpoint shows private posts as well)
 
 export async function getFolderPosts(token: string, folderId: string): Promise<APIPost[]> {
   try {
@@ -113,7 +113,7 @@ export async function getFolderPosts(token: string, folderId: string): Promise<A
     const data = await res.json()
     return data
     
-  } catch (error) {
+  } catch (error) { 
     console.error("Fetch posts error:", error)
     return []
   }

@@ -327,22 +327,42 @@ export default function UserPostsFeed() {
           <TabsList className="bg-transparent p-0 h-auto space-x-6">
             <TabsTrigger 
               value="timeline" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-2 pb-2"
+              className="rounded-none
+                border-b-2 border-b-transparent
+                data-[state=active]:border-b-primary
+                data-[state=active]:shadow-none
+                px-2 pb-2
+                transition-colors duration-200
+                "
             >
               <GitCommit className="w-4 h-4 mr-2" /> Timeline
             </TabsTrigger>
             <TabsTrigger 
               value="grid" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-2 pb-2"
+              className="rounded-none
+                border-b-2 border-b-transparent
+                data-[state=active]:border-b-primary
+                data-[state=active]:shadow-none
+                px-2 pb-2
+                transition-colors duration-200
+                "
             >
               <LayoutGrid className="w-4 h-4 mr-2" /> Grid
             </TabsTrigger>
-            <TabsTrigger 
+             <TabsTrigger 
               value="list" 
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none px-2 pb-2"
+              className="rounded-none
+                border-b-2 border-b-transparent
+                data-[state=active]:border-b-primary
+                data-[state=active]:shadow-none
+                px-2 pb-2
+                transition-colors duration-200
+                "
             >
-              <List className="w-4 h-4 mr-2" /> List
+              <List className="w-4 h-4 mr-2" /> list
             </TabsTrigger>
+
+           
           </TabsList>
         </div>
 

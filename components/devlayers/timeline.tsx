@@ -11,12 +11,11 @@ export interface TimelinePost {
   author?: {
     name: string
     avatar?: string
-    username: string
+    username?: string
   }
   date: string
   likes?: number
   comments?: number
-  // Updated fields
   githubLink?: string
   liveLink?: string
   hasImage?: boolean
@@ -24,7 +23,8 @@ export interface TimelinePost {
   tags?: string[]
   isLiked?: boolean
   isBookmarked?: boolean
-  rawVisibility?: "public" | "private" 
+  rawVisibility?: "public" | "private"
+  links?: Array<{ label: string; url: string }>
 }
 
 interface TimelineProps {
@@ -32,9 +32,10 @@ interface TimelineProps {
   className?: string
   onEdit?: (post: TimelinePost) => void
   onDelete?: (postId: string) => void
+  isOwner?: boolean
 }
 
-export function Timeline({ posts, className, onEdit, onDelete }: TimelineProps) {
+export function Timeline({ posts, className, onEdit, onDelete, isOwner = false }: TimelineProps) {
   return (
     <div className={cn("relative", className)}>
       <div className="absolute left-2 top-8 bottom-8 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-transparent" />
@@ -52,8 +53,9 @@ export function Timeline({ posts, className, onEdit, onDelete }: TimelineProps) 
             />
             <PostCard 
               {...post} 
-              onEdit={onEdit ? () => onEdit(post) : undefined}
-              onDelete={onDelete ? () => onDelete(post.id.toString()) : undefined}
+              onEdit={isOwner && onEdit ? () => onEdit(post) : undefined}
+              onDelete={isOwner && onDelete ? () => onDelete(post.id.toString()) : undefined}
+              showActions={isOwner}
             />
           </div>
         ))}

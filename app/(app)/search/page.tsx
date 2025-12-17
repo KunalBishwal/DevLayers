@@ -22,7 +22,7 @@ const recentSearches = ["react hooks", "typescript generics", "rust ownership", 
 
 const trendingSearches = [
   { query: "AI integration", count: "2.4k searches" },
-  { query: "React 19", count: "1.8k searches" },
+  { query: "Research", count: "1.8k searches" },
   { query: "Rust learning", count: "1.2k searches" },
   { query: "System design", count: "980 searches" },
 ]

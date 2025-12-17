@@ -1,9 +1,10 @@
 "use client"
+/* this is result public page only show public posts */
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { getUserProfile, type UserProfile } from "../../../lib/api/search_api"
-
+import { useRouter } from "next/navigation"
 import { FolderCard } from "@/components/devlayers/folder-card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -19,6 +20,7 @@ import {
   Link as LinkIcon, 
   ImageIcon,
   Globe,
+  Lock,
   Folder,
   Newspaper
 } from "lucide-react"
@@ -47,6 +49,7 @@ interface ExtendedUserProfile extends Omit<UserProfile, 'posts'> {
 }
 
 export default function ProfilePage() {
+  const router = useRouter()
   const params = useParams()
   const userId = params.id as string
 
@@ -135,6 +138,12 @@ export default function ProfilePage() {
         </div>
       </div>
 
+    {/* Public data notice */}
+      <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+        Public profile · showing publicly available data
+      </div>
+
       {/* --- Stats Grid --- */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-card/50 backdrop-blur-sm border-border/60">
@@ -151,7 +160,7 @@ export default function ProfilePage() {
         
         <Card className="bg-card/50 backdrop-blur-sm border-border/60">
           <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-orange-500/10 text-orange-500">
+            <div className="p-3 rounded-xl bg-white/10 text-white-500">
               <Newspaper className="w-6 h-6" />
             </div>
             <div>
@@ -187,7 +196,7 @@ export default function ProfilePage() {
                     totalDays={0}
                     isPublic={true}
                     lastUpdated="Recently"  
-                    onClick={() => {}}
+                    onClick={() => router.push(`/folders/${folder.id}`)}
                   />
                 ))}
               </div>
