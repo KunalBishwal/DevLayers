@@ -40,6 +40,9 @@ export interface Post {
   created_at: string
   images: PostImage[]
   links: PostLink[]
+  comments_count:number,
+  likes_count:number
+  dislikes_count:number
 }
 
 export interface SearchResponse {
@@ -78,24 +81,33 @@ export interface ProfilePost {
   images: PostImage[]
   links: PostLink[]
 }
+export interface social_links_interface{
+  label:string,
+  url:string
+}
 
 export interface UserProfile extends User {
   bio: string
   created_at: string
   folders: ProfileFolder[]
   posts: ProfilePost[]
+  followers:number,
+  is_follower:boolean,
+  social_links:social_links_interface[]
 }
 
-export const getUserProfile = async (userId: string | number): Promise<UserProfile> => {
+export const getUserProfile = async (userId: string | number,token:string): Promise<UserProfile> => {
   const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
     method: 'GET',
     headers: {
-      'accept': 'application/json'
+      'accept': 'application/json',
+      Authorization: `Bearer ${token}`,
     }
   })
 
   if (!response.ok) {
     throw new Error("Failed to fetch user profile")
   }
+  
   return response.json()
 }

@@ -156,6 +156,7 @@ export default function FolderPage() {
             avatar: authorAvatar 
           }, 
           likes: p.likes_count,
+          dislikes:p.dislikes_count,
           comments: p.comments_count,
           tags: Array.isArray(p.tags) ? p.tags : (p.tags ? p.tags.split(',').map((t: string) => t.trim()) : []),
           links: p.links || [], 
@@ -350,7 +351,6 @@ export default function FolderPage() {
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                 <p>{posts.length} days logged</p>
-                {isOwner && (
                   <button 
                     onClick={handleManualRefresh}
                     className={`flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
@@ -358,7 +358,6 @@ export default function FolderPage() {
                   >
                     <RefreshCcw className="w-3 h-3" /> 
                   </button>
-                )}
               </div>
             </div>
           </div>

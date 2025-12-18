@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react" // Removed useEffect for debounce
+import { useState, useCallback, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -9,16 +9,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { FolderCard } from "@/components/devlayers/folder-card"
 import { PostCard } from "@/components/devlayers/post-card"
 import { cn } from "@/app/lib/utils"
-import { Search, TrendingUp, Clock, X, FolderOpen, FileText, Users, Hash, Loader2, AlertCircle, ArrowRight } from "lucide-react"
+import { Search, TrendingUp, Clock, X, FolderOpen, FileText, Users, Hash, Loader2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
-// Import your API function and Types
+// Import API function and Types
 import { searchContent } from "../../lib/api/search_api" 
 import type { SearchResponse, Post } from "../../lib/api/search_api"
 
 // ---------- Constants ----------
-
-const recentSearches = ["react hooks", "typescript generics", "rust ownership", "nextjs app router"]
 
 const trendingSearches = [
   { query: "AI integration", count: "2.4k searches" },
@@ -32,11 +30,13 @@ const popularTags = [
   "design-system", "saas", "learning", "webdev", "frontend"
 ]
 
+const STORAGE_KEY = "devlayers_recent_searches"
+
 // ---------- Component ----------
 
 export default function SearchPage() {
   const [query, setQuery] = useState("")
-  const [recentSearchList, setRecentSearchList] = useState(recentSearches)
+  const [recentSearchList, setRecentSearchList] = useState<string[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,7 +48,31 @@ export default function SearchPage() {
     posts: []
   })
 
-  // Renamed to executeSearch to clarify it's the action trigger
+  // --- Persistence Logic ---
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      try {
+        setRecentSearchList(JSON.parse(saved))
+      } catch (e) {
+        console.error("Failed to parse recent searches", e)
+      }
+    }
+  }, [])
+
+  const updateRecentSearches = (searchTerm: string) => {
+    if (!searchTerm.trim()) return
+    setRecentSearchList((prev) => {
+      const filtered = prev.filter((item) => item.toLowerCase() !== searchTerm.toLowerCase())
+      const updated = [searchTerm, ...filtered].slice(0, 5)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+      return updated
+    })
+  }
+
+  // --- Handlers ---
+
   const executeSearch = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) return
 
@@ -59,10 +83,7 @@ export default function SearchPage() {
     try {
       const data = await searchContent(searchQuery)
       setResults(data)
-
-      if (!recentSearchList.includes(searchQuery)) {
-        setRecentSearchList((prev) => [searchQuery, ...prev.slice(0, 4)])
-      }
+      updateRecentSearches(searchQuery)
     } catch (err) {
       console.error(err)
       setError("Failed to fetch results. Please try again.")
@@ -70,15 +91,13 @@ export default function SearchPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [recentSearchList])
+  }, [])
 
-  // Handles clicking on tags/recent/trending
   const handleQuickSearch = (term: string) => {
     setQuery(term)
     executeSearch(term)
   }
 
-  // Handles manual clear
   const handleClear = () => {
     setQuery("")
     setHasSearched(false)
@@ -86,24 +105,30 @@ export default function SearchPage() {
   }
 
   const clearRecent = (search: string) => {
-    setRecentSearchList((prev) => prev.filter((s) => s !== search))
+    const updated = recentSearchList.filter((s) => s !== search)
+    setRecentSearchList(updated)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
   }
 
-  // Helper: Author
+  // --- Helpers ---
+
   const getAuthorForPost = (authorId: number) => {
     const user = results.users.find(u => u.id === authorId)
     return user 
-      ? { name: user.name, username: user.name.toLowerCase().replace(/\s/g, ''), avatar: user.profile_photo_url }
+      ? { 
+          name: user.name, 
+          username: user.name.toLowerCase().replace(/\s/g, ''), 
+          avatar: user.profile_photo_url 
+        }
       : { name: "Unknown User", username: "unknown", avatar: "" }
   }
 
-  // Helper: Format Links for PostCard
-  const getFormattedLinks = (post: Post) => {
-    if (!post.links) return []
-    return post.links.map(link => ({
+  const getPostLinks = (post: Post) => {
+    const links = post.links?.map(link => ({
       label: link.label || "External Link",
       url: link.url
-    }))
+    })) || []
+    return { links }
   }
 
   return (
@@ -120,7 +145,6 @@ export default function SearchPage() {
               className="pl-12 h-14 text-lg"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              // Trigger search ONLY on Enter
               onKeyDown={(e) => e.key === "Enter" && executeSearch(query)}
             />
             {query && (
@@ -134,7 +158,6 @@ export default function SearchPage() {
               </Button>
             )}
           </div>
-          {/* Explicit Search Button */}
           <Button 
             className="h-14 px-8 text-lg" 
             onClick={() => executeSearch(query)}
@@ -146,7 +169,6 @@ export default function SearchPage() {
       </div>
 
       {!hasSearched ? (
-        /* Initial State */
         <div className="space-y-8">
           {recentSearchList.length > 0 && (
             <div className="space-y-3">
@@ -162,7 +184,10 @@ export default function SearchPage() {
                     className="cursor-pointer hover:bg-primary/20 transition-colors gap-2 pr-1"
                   >
                     <span onClick={() => handleQuickSearch(search)}>{search}</span>
-                    <button onClick={(e) => { e.stopPropagation(); clearRecent(search) }} className="p-0.5 rounded hover:bg-background/50">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); clearRecent(search) }} 
+                      className="p-0.5 rounded hover:bg-background/50 transition-colors"
+                    >
                       <X className="w-3 h-3" />
                     </button>
                   </Badge>
@@ -181,10 +206,7 @@ export default function SearchPage() {
                 <button
                   key={item.query}
                   onClick={() => handleQuickSearch(item.query)}
-                  className={cn(
-                    "w-full flex items-center gap-4 p-3 rounded-lg",
-                    "hover:bg-secondary transition-colors text-left",
-                  )}
+                  className="w-full flex items-center gap-4 p-3 rounded-lg hover:bg-secondary transition-colors text-left"
                 >
                   <span className="text-2xl font-bold text-muted-foreground/50 w-8">{index + 1}</span>
                   <div>
@@ -206,7 +228,7 @@ export default function SearchPage() {
                 <Badge
                   key={tag}
                   variant="outline"
-                  className="cursor-pointer hover:bg-primary/20 hover:border-primary/30 transition-colors"
+                  className="cursor-pointer hover:bg-primary/20 transition-colors"
                   onClick={() => handleQuickSearch(`#${tag}`)}
                 >
                   #{tag}
@@ -216,7 +238,6 @@ export default function SearchPage() {
           </div>
         </div>
       ) : (
-        /* Results State */
         <div className="space-y-6">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 space-y-4 text-muted-foreground">
@@ -247,22 +268,21 @@ export default function SearchPage() {
 
               {/* === ALL RESULTS TAB === */}
               <TabsContent value="all" className="mt-6 space-y-8">
-                {/* Users */}
                 {results.users.length > 0 && (
                   <div className="space-y-4">
                     <h3 className="font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> Users</h3>
                     <div className="grid md:grid-cols-3 gap-4">
-                      {results.users.map((user) => (
-                        <Link key={user.id} href={`/profile/${user.id}`} >
+                      {results.users.slice(0, 3).map((user) => (
+                        <Link key={user.id} href={`/profile/${user.id}`}>
                           <div className="p-4 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer">
                             <div className="flex items-center gap-3">
                               <Avatar className="w-12 h-12">
-                                <AvatarImage src={user.profile_photo_url || "/placeholder.svg"} alt={user.name} />
-                                <AvatarFallback className="bg-primary/10 text-primary">{user.name.toUpperCase()}</AvatarFallback>
+                                <AvatarImage src={user.profile_photo_url || "/placeholder.svg"} />
+                                <AvatarFallback>{user.name.slice(0,2).toUpperCase()}</AvatarFallback>
                               </Avatar>
-                              <div>
-                                <p className="font-medium">{user.name}</p>
-                                <p className="text-sm text-muted-foreground">@{user.name.toLowerCase().replace(/\s/g, '')}</p>
+                              <div className="overflow-hidden">
+                                <p className="font-medium truncate">{user.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">@{user.name.toLowerCase().replace(/\s/g, '')}</p>
                               </div>
                             </div>
                           </div>
@@ -272,48 +292,44 @@ export default function SearchPage() {
                   </div>
                 )}
 
-                {/* Folders */}
                 {results.folders.length > 0 && (
                   <div className="space-y-4">
                     <h3 className="font-semibold flex items-center gap-2"><FolderOpen className="w-4 h-4" /> Folders</h3>
                     <div className="grid md:grid-cols-2 gap-4">
                       {results.folders.map((folder) => (
                         <Link key={folder.id} href={`/folders/${folder.id}`}>
-                          <FolderCard 
-                             id={folder.id.toString()}
-                             title={folder.name}
-                             description={folder.description}
-                             isPublic={folder.visibility === 'public'}
-                          />
+                          <FolderCard id={folder.id.toString()} title={folder.name} description={folder.description} isPublic={folder.visibility === 'public'} />
                         </Link>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Posts */}
                 {results.posts.length > 0 && (
                   <div className="space-y-4">
                     <h3 className="font-semibold flex items-center gap-2"><FileText className="w-4 h-4" /> Posts</h3>
                     <div className="space-y-4">
-                      {results.posts.map((post) => (
-                        <PostCard 
-                          key={post.id} 
-                          day={1}
-                          title={post.title}
-                          content={post.body}
-                          author={getAuthorForPost(post.author_id)}
-                          date={new Date(post.created_at).toLocaleDateString()}
-                          
-                          links={getFormattedLinks(post)}
-                          hasImage={post.images && post.images.length > 0}
-                          imageUrl={post.images?.[0]?.url}
-                          tags={Array.isArray(post.tags) ? post.tags : [post.tags]}
-                          
-                          likes={0} 
-                          comments={0}
-                        />
-                      ))}
+                      {results.posts.map((post) => {
+                        const { links } = getPostLinks(post);
+                        return (
+                          <PostCard 
+                            key={post.id} 
+                            id={post.id.toString()}
+                            day={1}
+                            title={post.title}
+                            content={post.body}
+                            author={getAuthorForPost(post.author_id)}
+                            date={new Date(post.created_at).toLocaleDateString()}
+                            links={links}
+                            hasImage={post.images && post.images.length > 0}
+                            imageUrl={post.images?.[0]?.url}
+                            tags={Array.isArray(post.tags) ? post.tags : post.tags ? [post.tags] : []}
+                            likes={post.likes_count}
+                            dislikes={post.dislikes_count}
+                            comments={post.comments_count}
+                          />
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -323,14 +339,9 @@ export default function SearchPage() {
               <TabsContent value="folders" className="mt-6">
                 <div className="grid md:grid-cols-2 gap-4">
                   {results.folders.map((folder) => (
-                     <Link key={folder.id} href={`/folders/${folder.id}`}>
-                        <FolderCard 
-                             id={folder.id.toString()}
-                             title={folder.name}
-                             description={folder.description}
-                             isPublic={folder.visibility === 'public'}
-                        />
-                     </Link>
+                    <Link key={folder.id} href={`/folders/${folder.id}`}>
+                      <FolderCard id={folder.id.toString()} title={folder.name} description={folder.description} isPublic={folder.visibility === 'public'} />
+                    </Link>
                   ))}
                 </div>
               </TabsContent>
@@ -338,22 +349,22 @@ export default function SearchPage() {
               {/* === POSTS TAB === */}
               <TabsContent value="posts" className="mt-6 space-y-4">
                 {results.posts.map((post) => (
-                    <PostCard 
-                        key={post.id} 
-                        day={1}
-                        title={post.title}
-                        content={post.body}
-                        author={getAuthorForPost(post.author_id)}
-                        date={new Date(post.created_at).toLocaleDateString()}
-                        
-                        links={getFormattedLinks(post)}
-                        hasImage={post.images && post.images.length > 0}
-                        imageUrl={post.images?.[0]?.url}
-                        tags={Array.isArray(post.tags) ? post.tags : [post.tags]}
-                        
-                        likes={0} 
-                        comments={0}
-                    />
+                  <PostCard 
+                    key={post.id} 
+                    id={post.id.toString()}
+                    day={1}
+                    title={post.title}
+                    content={post.body}
+                    author={getAuthorForPost(post.author_id)}
+                    date={new Date(post.created_at).toLocaleDateString()}
+                    links={getPostLinks(post).links}
+                    hasImage={post.images && post.images.length > 0}
+                    imageUrl={post.images?.[0]?.url}
+                    tags={Array.isArray(post.tags) ? post.tags : post.tags ? [post.tags] : []}
+                    likes={post.likes_count}
+                    comments={post.comments_count}
+                    showActions={false}
+                  />
                 ))}
               </TabsContent>
 
@@ -365,15 +376,15 @@ export default function SearchPage() {
                       <div className="p-4 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer">
                         <div className="flex items-center gap-3">
                           <Avatar className="w-12 h-12">
-                            <AvatarImage src={user.profile_photo_url || "/placeholder.svg"} alt={user.name} />
-                            <AvatarFallback className="bg-primary/10 text-primary">{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                            <AvatarImage src={user.profile_photo_url || "/placeholder.svg"} />
+                            <AvatarFallback>{user.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                           </Avatar>
-                          <div>
-                            <p className="font-medium">{user.name}</p>
-                            <p className="text-sm text-muted-foreground">@{user.name.toLowerCase().replace(/\s/g, '')}</p>
+                          <div className="overflow-hidden">
+                            <p className="font-medium truncate">{user.name}</p>
+                            <p className="text-sm text-muted-foreground truncate">@{user.name.toLowerCase().replace(/\s/g, '')}</p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" className="w-full mt-3 bg-transparent">Follow</Button>
+                        <Button variant="outline" size="sm" className="w-full mt-3">View Profile</Button>
                       </div>
                     </Link>
                   ))}

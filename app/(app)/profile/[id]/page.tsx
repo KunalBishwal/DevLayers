@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { getUserProfile, type UserProfile } from "../../../lib/api/search_api"
+import { getUserProfile, type UserProfile } from "@/app/lib/api/search_api"
 import { useRouter } from "next/navigation"
 import { FolderCard } from "@/components/devlayers/folder-card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { FollowTargetProfile,UnfollowTargetProfile } from "@/app/lib/api/follow_api"
 import { 
   Calendar, 
   BookOpen, 
@@ -22,7 +23,8 @@ import {
   Globe,
   Lock,
   Folder,
-  Newspaper
+  Newspaper,
+  Users
 } from "lucide-react"
 
 // 👇 1. Defined correct types for Images and Links based on your error
@@ -57,14 +59,58 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const isOwnProfile =false /* currentUserId === profile.id*/
+  const [isFollowing,setisFollowing] =useState(false) /* profile.is_following  */      // boolean
+  const isFriend = true /* profile.is_friend         */     // boolean (mutual follow)
+  
+
+
+// to follow / unfollow users
+async function handleFollowToggle() {
+  const token = localStorage.getItem("token")
+  if (!token) {
+    alert("You must be logged in to follow users.")
+    return
+  }
+
+  try {
+    if (!isFollowing) {
+      await FollowTargetProfile(token, Number(userId))
+      alert(`You are now following ${profile===null?"this user":profile.name}`)
+    } else {
+      await UnfollowTargetProfile(token, Number(userId))
+      alert(`You have unfollowed ${profile===null?"this user":profile.name}`)
+    }
+
+    // update UI ONLY if API succeeds
+    setisFollowing((prev) => !prev)
+
+  } catch (error: any) {
+    console.error(error)
+
+    // 👇 show backend message if available
+    const message =
+      error?.message ||
+      "Something went wrong. Please try again."
+
+    alert(message)
+  }
+}
+
+
+
+
+
   useEffect(() => {
     if (!userId) return
 
     const fetchData = async () => {
       try {
+        const token=localStorage.getItem("token") || ""
         setLoading(true)
-        const data = await getUserProfile(userId)
+        const data = await getUserProfile(userId,token)
         setProfile(data as unknown as ExtendedUserProfile)
+        setisFollowing(data.is_follower || false)
       } catch (err) {
         console.error(err)
         setError("Failed to load profile")
@@ -106,37 +152,103 @@ export default function ProfilePage() {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-10 animate-in fade-in duration-500">
       
-      {/* --- Profile Header --- */}
-      <div className="relative">
-        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-r from-primary/5 to-transparent rounded-xl -z-10" />
-        
-        <div className="flex flex-col md:flex-row gap-8 items-start pt-6 px-4">
-          <Avatar className="w-32 h-32 border-4 border-background shadow-xl">
-            <AvatarImage src={profile.profile_photo_url || ""} alt={profile.name} className="object-cover"/>
-            <AvatarFallback className="bg-primary/10 text-primary text-4xl font-bold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+    {/* --- Profile Header --- */}
+    <div className="relative">
+      <div className="absolute top-0 left-0 w-full h-36 bg-gradient-to-r from-primary/5 to-transparent rounded-xl -z-10" />
 
-          <div className="flex-1 space-y-3 pt-2">
+      <div className="flex flex-col md:flex-row gap-8 items-start pt-8 px-6">
+        {/* Avatar */}
+        <Avatar className="w-32 h-32 border-4 border-background shadow-xl shrink-0">
+          <AvatarImage
+            src={profile.profile_photo_url || ""}
+            alt={profile.name}
+            className="object-cover"
+          />
+          <AvatarFallback className="bg-primary/10 text-primary text-4xl font-bold">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+
+        {/* Right content */}
+        <div className="flex-1 space-y-5">
+          {/* Name + follow */}
+          <div className="flex flex-wrap items-center gap-4 justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight capitalize text-foreground">
                 {profile.name}
               </h1>
-              <p className="text-muted-foreground font-medium">{(profile as any).email}</p>
+              <p className="text-muted-foreground font-medium text-sm">
+                {(profile as any).email}
+              </p>
             </div>
 
-            <p className="text-foreground/80 leading-relaxed max-w-3xl text-lg">
+            {!isOwnProfile && (
+              <button
+                onClick={handleFollowToggle}
+                className={`
+                  h-8 px-4 rounded-full text-sm font-medium transition
+                  ${isFollowing
+                    ? "border border-border bg-background hover:bg-destructive/10 hover:text-destructive"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"}
+                `}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </button>
+            )}
+          </div>
+
+          {/* Bio */}
+          {profile.bio && (
+            <p className="text-foreground/80 leading-relaxed max-w-3xl text-base">
               {profile.bio}
             </p>
+          )}
 
-            <div className="flex items-center gap-2 bg-secondary/30 w-fit px-3 py-1 rounded-full text-sm text-muted-foreground">
-              <Calendar className="w-4 h-4" />
-              Joined {joinDate}
+          {/* Stats + Friend */}
+          <div className="flex flex-wrap items-center gap-4 text-sm">
+            <div className="text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                {profile.followers}
+              </span>{" "}
+              followers
             </div>
+
+            {isFriend && (
+              <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+                <Users className="w-3.5 h-3.5" />
+                Friends
+              </div>
+            )}
+          </div>
+
+          {/* Social links */}
+          {profile.social_links?.length > 0 && (
+            <div className="flex flex-wrap gap-3 pt-2">
+              {profile.social_links.map((link, idx) => (
+                <a
+                  key={idx}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-background text-sm text-muted-foreground hover:text-primary hover:border-primary/40 transition"
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* Joined */}
+          <div className="flex items-center gap-2 bg-secondary/30 w-fit px-3 py-1 rounded-full text-sm text-muted-foreground">
+            <Calendar className="w-4 h-4" />
+            Joined {joinDate}
           </div>
         </div>
       </div>
+    </div>
+
+
 
     {/* Public data notice */}
       <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
@@ -191,11 +303,7 @@ export default function ProfilePage() {
                     id={folder.id.toString()}
                     title={folder.name}
                     description={folder.description}
-                    type="project"
-                    daysLogged={0}
-                    totalDays={0}
-                    isPublic={true}
-                    lastUpdated="Recently"  
+                    isPublic={true} 
                     onClick={() => router.push(`/folders/${folder.id}`)}
                   />
                 ))}

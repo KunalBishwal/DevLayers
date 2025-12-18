@@ -5,7 +5,7 @@ import {
   getPostComments, 
   createComment, 
   deleteComment 
-} from "../app/lib/api/comments_api"
+} from "../app/lib/api/reactions_api"
 
 interface UseCommentsProps {
   postId: number

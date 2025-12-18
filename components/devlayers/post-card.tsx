@@ -1,10 +1,11 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/app/lib/utils"
 import { 
   Heart, 
+  ThumbsDown,
   MessageCircle, 
   Share2, 
   Bookmark, 
@@ -15,7 +16,8 @@ import {
   Trash2, 
   Send, 
   X,
-  Maximize2
+  Check,
+  Clock
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -30,22 +32,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+// API Imports
+import { 
+  deleteComment, 
+  createComment, 
+  editComment,
+  getPostComments, 
+  addReaction,
+  removeReaction,
+  type Comment as APIComment 
+} from '../../app/lib/api/reactions_api'
+
 // --- Types ---
 interface LinkItem {
   label: string
   url: string
 }
 
-interface Comment {
-  id: string
-  author: string
-  avatar?: string
-  text: string
-  timestamp: string
-}
-
 interface PostCardProps {
-  id: string // Unique ID is crucial for layout animations
+  id: string 
   day: number
   title: string
   content: string
@@ -56,27 +61,21 @@ interface PostCardProps {
   }
   date: string
   likes?: number
+  dislikes?: number // Added
   comments?: number
   links?: LinkItem[]
   hasImage?: boolean
   imageUrl?: string
   tags?: string[]
   isLiked?: boolean
+  isDisliked?: boolean // Added
   isBookmarked?: boolean
   className?: string
   showDayBadge?: boolean
   showActions?: boolean
-  onClick?: () => void
   onEdit?: () => void
   onDelete?: () => void
 }
-
-// --- Hardcoded Comments Data ---
-const MOCK_COMMENTS: Comment[] = [
-  { id: "1", author: "Sarah Chen", avatar: "", text: "This is exactly what I was looking for! The clean UI approach is super helpful.", timestamp: "2h ago" },
-  { id: "2", author: "Dev Mike", avatar: "", text: "Could you share the repo for the backend logic?", timestamp: "5h ago" },
-  { id: "3", author: "Alex Design", avatar: "", text: "Love the transition effects. Very smooth.", timestamp: "1d ago" },
-]
 
 export function PostCard({
   id,
@@ -86,12 +85,14 @@ export function PostCard({
   author,
   date,
   likes = 0,
+  dislikes = 0, 
   comments: initialCommentCount = 0,
   links = [], 
   hasImage = false,
   imageUrl,
   tags = [],
   isLiked: initialIsLiked = false,
+  isDisliked: initialIsDisliked = false, // Added
   isBookmarked: initialIsBookmarked = false,
   className,
   onEdit,
@@ -99,54 +100,41 @@ export function PostCard({
   showDayBadge = true,
   showActions = false,
 }: PostCardProps) {
-  // State
+  
+  // --- State ---
   const [isExpanded, setIsExpanded] = useState(false)
   const [isLiked, setIsLiked] = useState(initialIsLiked)
+  const [isDisliked, setIsDisliked] = useState(initialIsDisliked)
   const [likeCount, setLikeCount] = useState(likes)
+  const [dislikeCount, setDislikeCount] = useState(dislikes)
   const [commentText, setCommentText] = useState("")
-  const [commentsList, setCommentsList] = useState<Comment[]>(MOCK_COMMENTS)
+  const [commentsList, setCommentsList] = useState<APIComment[]>([])
+  const [isLoadingComments, setIsLoadingComments] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
+  const [editText, setEditText] = useState("")
 
-  // Refs for click outside handling
-  const cardRef = useRef<HTMLDivElement>(null)
+  // --- Effects ---
 
-  // --- Handlers ---
-
-  const handleLike = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsLiked(!isLiked)
-    setLikeCount((prev) => (isLiked ? prev - 1 : prev + 1))
-  }
-
-  const handleSendComment = (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    e?.stopPropagation()
-    
-    if (!commentText.trim()) return
-
-    const newComment: Comment = {
-      id: Date.now().toString(),
-      author: "You", // In a real app, this comes from auth context
-      text: commentText,
-      timestamp: "Just now"
-    }
-
-    setCommentsList([newComment, ...commentsList])
-    setCommentText("")
-    
-    // Auto expand if commenting from inline view to show the result
-    if (!isExpanded) setIsExpanded(true)
-  }
-
-  // Close on Escape key
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsExpanded(false)
+    const userCache = localStorage.getItem("user_cache")
+    if (userCache) {
+      try {
+        const parsedCache = JSON.parse(userCache)
+        setCurrentUserId(parsedCache.id)
+      } catch (e) { console.error(e) }
     }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  // Lock body scroll when expanded
+  useEffect(() => {
+    if (isExpanded) {
+      setIsLoadingComments(true)
+      getPostComments(Number(id))
+        .then(setCommentsList)
+        .finally(() => setIsLoadingComments(false))
+    }
+  }, [isExpanded, id])
+
   useEffect(() => {
     if (isExpanded) {
       document.body.style.overflow = "hidden"
@@ -156,10 +144,95 @@ export function PostCard({
     return () => { document.body.style.overflow = "unset" }
   }, [isExpanded])
 
-  // --- Render Helpers ---
+  // --- Reaction Handlers ---
 
-  const PostContent = ({ isFullView = false }: { isFullView?: boolean }) => (
-    <>
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const token = localStorage.getItem("token") || ""
+    if (!token) return
+
+    // Optimistic UI logic
+    if (isLiked) {
+      // Remove Like
+      setIsLiked(false)
+      setLikeCount(prev => prev - 1)
+      await removeReaction(token, Number(id))
+    } else {
+      // If currently disliked, remove dislike first
+      if (isDisliked) {
+        setIsDisliked(false)
+        setDislikeCount(prev => prev - 1)
+      }
+      // Add Like
+      setIsLiked(true)
+      setLikeCount(prev => prev + 1)
+      await addReaction(token, Number(id), "like")
+    }
+  }
+
+  const handleDislike = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const token = localStorage.getItem("token") || ""
+    if (!token) return
+
+    // Optimistic UI logic
+    if (isDisliked) {
+      // Remove Dislike
+      setIsDisliked(false)
+      setDislikeCount(prev => prev - 1)
+      await removeReaction(token, Number(id))
+    } else {
+      // If currently liked, remove like first
+      if (isLiked) {
+        setIsLiked(false)
+        setLikeCount(prev => prev - 1)
+      }
+      // Add Dislike
+      setIsDisliked(true)
+      setDislikeCount(prev => prev + 1)
+      await addReaction(token, Number(id), "dislike")
+    }
+  }
+
+  // --- Comment Handlers ---
+
+  const handleSendComment = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!commentText.trim()) return
+
+    const token = localStorage.getItem("token") || ""
+    const newComment = await createComment(token, Number(id), commentText)
+
+    if (newComment) {
+      setCommentsList([newComment, ...commentsList])
+      setCommentText("")
+    }
+  }
+
+  const handleDeleteComment = async (commentId: number) => {
+    const token = localStorage.getItem("token") || ""
+    if (await deleteComment(token, Number(id), commentId)) {
+      setCommentsList((prev) => prev.filter(c => c.id !== commentId))
+    }
+  }
+
+  const handleUpdateComment = async (commentId: number) => {
+    if (!editText.trim()) return
+    const token = localStorage.getItem("token") || ""
+    const updated = await editComment(token, Number(id), commentId, editText)
+    
+    if (updated) {
+      setCommentsList((prev) => 
+        prev.map(c => c.id === commentId ? { ...c, body: updated.body } : c)
+      )
+      setEditingCommentId(null)
+    }
+  }
+
+  // --- Helper Component ---
+
+  const PostBody = ({ isFullView = false }: { isFullView?: boolean }) => (
+    <div className="flex flex-col">
       <div className="flex justify-between items-start mb-4">
         {author && (
           <div className="flex items-center gap-3">
@@ -177,240 +250,196 @@ export function PostCard({
         )}
 
         <div className="flex items-center gap-1">
-           {/* If full view, show close button, otherwise show dropdown */}
            {isFullView ? (
-             <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setIsExpanded(false)}>
+             <Button variant="ghost" size="icon" className="rounded-full h-9 w-9" onClick={() => setIsExpanded(false)}>
                <X className="w-5 h-5" />
              </Button>
-           ) : (
-            <>
-              {showActions && (onEdit || onDelete) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {onEdit && (
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit() }}>
-                        <Pencil className="mr-2 h-4 w-4" /> Edit Post
-                      </DropdownMenuItem>
-                    )}
-                    {onDelete && (
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete() }} className="text-destructive">
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete Post
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </>
+           ) : showActions && (
+             <DropdownMenu>
+               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                 <Button variant="ghost" size="icon" className="h-8 w-8">
+                   <MoreHorizontal className="w-4 h-4" />
+                 </Button>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="end">
+                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit?.() }}>
+                   <Pencil className="mr-2 h-4 w-4" /> Edit Post
+                 </DropdownMenuItem>
+                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete?.() }} className="text-destructive">
+                   <Trash2 className="mr-2 h-4 w-4" /> Delete Post
+                 </DropdownMenuItem>
+               </DropdownMenuContent>
+             </DropdownMenu>
            )}
         </div>
       </div>
 
       <h3 className="font-semibold text-lg mb-2">{title}</h3>
-      
-      <p className={cn(
-        "text-muted-foreground text-sm leading-relaxed whitespace-pre-line mb-4",
-        !isFullView && "line-clamp-3" // Truncate only in inline view
-      )}>
+      <p className={cn("text-muted-foreground text-sm leading-relaxed mb-4", !isFullView && "line-clamp-3")}>
         {content}
       </p>
 
       {hasImage && imageUrl && (
-        <div className="relative rounded-lg overflow-hidden mb-4 aspect-video bg-secondary">
+        <div className="rounded-lg overflow-hidden mb-4 aspect-video bg-secondary">
           <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
         </div>
       )}
 
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
-          {tags.map((tag, index) => (
-            <Badge key={index} variant="secondary" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
+          {tags.map((tag, i) => <Badge key={i} variant="secondary" className="text-xs">{tag}</Badge>)}
         </div>
       )}
 
-      {/* Action Bar */}
       <div className="flex items-center justify-between pt-3 border-t border-border mb-3">
         <div className="flex items-center gap-1">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleLike} 
-            className={cn("h-8 px-2 gap-1.5", isLiked && "text-red-500")}
-          >
+          {/* Like Button */}
+          <Button variant="ghost" size="sm" onClick={handleLike} className={cn("h-8 px-2 gap-1.5", isLiked && "text-red-500 hover:text-red-600")}>
             <Heart className={cn("w-4 h-4", isLiked && "fill-current")} />
             <span className="text-xs">{likeCount}</span>
           </Button>
-          
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-8 px-2 gap-1.5"
-            onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span className="text-xs">{initialCommentCount}</span>
-          </Button>
-          
-          <Button variant="ghost" size="sm" className="h-8 px-2">
-            <Share2 className="w-4 h-4" />
-          </Button>
-        </div>
 
-        <div className="flex items-center gap-1">
-          {links.map((link, idx) => (
-            <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="sm" className="h-8 px-2">
-                {link.label.toLowerCase().includes("github") ? <Github className="w-4 h-4" /> : <ExternalLink className="w-4 h-4" />}
-              </Button>
+          {/* Dislike Button */}
+          <Button variant="ghost" size="sm" onClick={handleDislike} className={cn("h-8 px-2 gap-1.5", isDisliked && "text-blue-500 hover:text-blue-600")}>
+            <ThumbsDown className={cn("w-4 h-4", isDisliked && "fill-current")} />
+            <span className="text-xs">{dislikeCount}</span>
+          </Button>
+
+          <Button variant="ghost" size="sm" className="h-8 px-2 gap-1.5" onClick={() => setIsExpanded(true)}>
+            <MessageCircle className="w-4 h-4" />
+            <span className="text-xs">{commentsList.length || initialCommentCount}</span>
+          </Button>
+          <Share2 className="w-4 h-4 mx-2 text-muted-foreground cursor-pointer" />
+        </div>
+        <div className="flex items-center gap-2">
+          {links.map((l, i) => (
+            <a key={i} href={l.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>
+              {l.label.toLowerCase().includes("github") ? <Github className="w-4 h-4" /> : <ExternalLink className="w-4 h-4" />}
             </a>
           ))}
-          <Button variant="ghost" size="sm" className="h-8 px-2">
-            <Bookmark className={cn("w-4 h-4", initialIsBookmarked && "fill-current")} />
-          </Button>
+          <Bookmark className="w-4 h-4 text-muted-foreground cursor-pointer" />
         </div>
       </div>
-    </>
+    </div>
   )
 
   return (
     <>
-      {/* INLINE CARD (Feed View) 
-        We use layoutId to connect this to the expanded view
-      */}
+      {/* FEED VIEW */}
       <motion.div
         layoutId={`card-${id}`}
         onClick={() => setIsExpanded(true)}
-        className={cn(
-          "group relative rounded-xl border border-border bg-card p-5 cursor-pointer",
-          "hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-colors",
-          className,
-          // If expanded, we hide the inline card visually but keep it in DOM for layout stability
-          isExpanded ? "opacity-0 pointer-events-none" : "opacity-100"
-        )}
+        className={cn("group relative rounded-xl border border-border bg-card p-5 cursor-pointer hover:shadow-lg transition-all", className)}
       >
-        {showDayBadge && (
-          <Badge variant="outline" className="absolute -top-2.5 left-4 bg-background border-primary/30 text-primary font-mono text-xs px-2 z-10">
-            Post #{day}
-          </Badge>
-        )}
-        
-        <div className="pt-2">
-          <PostContent />
-          
-          {/* Inline Quick Comment Input */}
-          <div className="flex gap-2 items-center mt-2" onClick={(e) => e.stopPropagation()}>
-          
-            <div className="relative flex-1">
-              <Input 
-                placeholder="Write a comment..." 
-                className="h-9 pr-8 text-sm bg-muted/30 border-none focus-visible:ring-1"
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendComment()}
-              />
-              <Button 
-                size="icon" 
-                variant="ghost" 
-                className="absolute right-1 top-1 h-7 w-7 text-muted-foreground hover:text-primary"
-                onClick={handleSendComment}
-              >
-                <Send className="w-3 h-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
+        {showDayBadge && <Badge variant="outline" className="absolute -top-2.5 left-4 bg-background border-primary/30 text-primary">Post #{day}</Badge>}
+        <div className="pt-2"><PostBody /></div>
       </motion.div>
 
-
-      {/* EXPANDED OVERLAY (Focus View)
-        Renders on top of everything
-      */}
+      {/* EXPANDED MODAL */}
       <AnimatePresence>
         {isExpanded && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/70 backdrop-blur-md"
               onClick={() => setIsExpanded(false)}
-              className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
             />
+            
+            <motion.div 
+              layoutId={`card-${id}`}
+              className="relative w-full max-w-2xl h-[90vh] flex flex-col bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+            >
+              {/* SCROLLABLE AREA */}
+              <ScrollArea className="flex-1 min-h-0 w-full">
+                <div className="p-6">
+                  <PostBody isFullView />
+                  <div className="my-6 border-t border-border" />
 
-            {/* Centered Modal */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
-              <motion.div
-                layoutId={`card-${id}`}
-                className="w-full max-w-2xl bg-card rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] pointer-events-auto border border-border"
-              >
-                {/* Scrollable Content Area */}
-                <ScrollArea className="flex-1 p-0">
-                  <div className="p-6">
-                    {/* Reuse content but allow full expansion */}
-                    <PostContent isFullView />
+                  {/* Comments Section */}
+                  <div className="space-y-6 pb-10">
+                    <h4 className="font-bold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      Discussion ({commentsList.length})
+                    </h4>
+                    
+                    {isLoadingComments ? (
+                      <div className="text-center py-10 text-sm text-muted-foreground animate-pulse">Fetching comments...</div>
+                    ) : (
+                      <div className="space-y-8">
+                        {commentsList.map((c) => (
+                          <div key={c.id} className="flex gap-4 items-start">
+                            <Avatar className="w-9 h-9 shrink-0">
+                              <AvatarImage src={c.author_profile_image || ''} />
+                              <AvatarFallback>{c.author_name?.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold">{c.author_name}</span>
+                                  <span className="text-[10px] text-muted-foreground flex items-center gap-1 bg-secondary/50 px-2 py-0.5 rounded-full">
+                                    <Clock className="w-3 h-3" />
+                                    {c.created_at ? new Date(c.created_at).toLocaleDateString() : "Just now"}
+                                  </span>
+                                </div>
+                                
+                                {c.author_id === currentUserId && (
+                                  <div className="flex items-center gap-1">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                      onClick={() => { setEditingCommentId(c.id); setEditText(c.body); }}
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                      onClick={() => handleDeleteComment(c.id)}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
 
-                    <div className="my-6 border-t border-border" />
-
-                    {/* Comments Section */}
-                    <div className="space-y-6">
-                      <h4 className="font-semibold text-sm text-muted-foreground">
-                        Comments ({commentsList.length})
-                      </h4>
-                      
-                      {commentsList.map((comment) => (
-                        <div key={comment.id} className="flex gap-3 items-start animate-in fade-in slide-in-from-bottom-2">
-                          <Avatar className="w-8 h-8">
-                            <AvatarFallback>{comment.author.slice(0, 2).toUpperCase()}</AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">{comment.author}</span>
-                              <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
+                              {editingCommentId === c.id ? (
+                                <div className="flex gap-2 mt-2">
+                                  <Input value={editText} onChange={e => setEditText(e.target.value)} className="h-8 text-sm" autoFocus />
+                                  <Button size="icon" className="h-8 w-8" onClick={() => handleUpdateComment(c.id)}><Check className="w-4 h-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditingCommentId(null)}><X className="w-4 h-4" /></Button>
+                                </div>
+                              ) : (
+                                <p className="text-sm leading-relaxed text-foreground/90 break-words whitespace-pre-wrap">{c.body}</p>
+                              )}
                             </div>
-                            <p className="text-sm text-foreground/90 leading-relaxed">{comment.text}</p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                        {commentsList.length === 0 && (
+                          <div className="text-center py-10 border-2 border-dashed border-border rounded-xl">
+                            <p className="text-sm text-muted-foreground">No comments yet. Start the conversation!</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </ScrollArea>
-
-                {/* Sticky Footer Input */}
-                <div className="p-4 bg-background border-t border-border mt-auto">
-                  <form 
-                    onSubmit={handleSendComment}
-                    className="flex gap-3 items-end"
-                  >
-                
-                    <div className="flex-1 relative">
-                       <Input 
-                        placeholder="Write a thoughtful comment..." 
-                        className="min-h-[44px] pr-12 bg-muted/50"
-                        autoFocus
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                      />
-                      <Button 
-                        type="submit" 
-                        size="icon" 
-                        className="absolute right-1 top-1 bottom-1 h-auto w-10 rounded-md"
-                        disabled={!commentText.trim()}
-                      >
-                        <Send className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </form>
                 </div>
-              </motion.div>
-            </div>
-          </>
+              </ScrollArea>
+
+              {/* INPUT AREA */}
+              <div className="p-4 bg-muted/20 border-t border-border shrink-0">
+                <form onSubmit={handleSendComment} className="flex gap-2">
+                  <Input 
+                    placeholder="Write a comment..." 
+                    value={commentText} 
+                    onChange={e => setCommentText(e.target.value)} 
+                    className="bg-background"
+                  />
+                  <Button type="submit" size="icon" disabled={!commentText.trim()}><Send className="w-4 h-4" /></Button>
+                </form>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </>
