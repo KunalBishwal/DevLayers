@@ -19,6 +19,7 @@ import {
   Code,
   AlertCircle,
   NewspaperIcon,
+  UsersRound,
   Folder, // Added for potential error state, though signout is mostly local
 } from "lucide-react"
 import Link from "next/link"
@@ -45,7 +46,7 @@ const navItems = [
   { icon: PenSquare, label: "Create Post", href: "/create" },
   { icon: Globe, label: "Explore", href: "/explore" },
   { icon: Search, label: "Search", href: "/search" },
-  { icon: Bell, label: "Notifications", href: "/notifications" },
+  { icon: UsersRound, label: "Community", href: "/community" },
   
 ]
 

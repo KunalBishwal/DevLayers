@@ -93,7 +93,8 @@ export interface UserProfile extends User {
   posts: ProfilePost[]
   followers:number,
   is_follower:boolean,
-  social_links:social_links_interface[]
+  social_links:social_links_interface[],
+  friendship_status:"pending_recieved" | "none" | "pending_sent" | "friends"
 }
 
 export const getUserProfile = async (userId: string | number,token:string): Promise<UserProfile> => {
