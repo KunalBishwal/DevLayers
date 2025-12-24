@@ -18,7 +18,7 @@ import {
 // Components
 import { EditPostDialog } from "@/components/devlayers/EditPostDialog"
 import { ConfirmModal } from "@/components/devlayers/delete_confirmation_widget"
-import { PostCard } from "@/components/devlayers/post-card" // Adjust path as needed
+import { PostCard } from "@/components/devlayers/post-card" 
 
 // API
 import { updatePost, UpdatePostData } from "../../lib/api/update_api"
@@ -209,7 +209,7 @@ export default function UserPostsFeed() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Timeline</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Your Posts</h1>
           <div className="flex items-center gap-2 mt-1">
              <p className="text-muted-foreground text-sm">{posts.length} updates found.</p>
              <button onClick={() => loadData(true)} className={`${isRefreshing ? 'animate-spin' : ''}`}>
@@ -261,6 +261,8 @@ export default function UserPostsFeed() {
               
               likes={post.likes_count || 0}
               comments={post.comments_count || 0}
+              views={post.views_count}
+              dislikes={post.dislikes_count}
               
               // Image handling
               hasImage={post.images && post.images.length > 0}

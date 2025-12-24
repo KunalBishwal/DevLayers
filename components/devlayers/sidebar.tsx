@@ -18,6 +18,7 @@ import {
   NewspaperIcon,
   UsersRound,
   Folder,
+  Bookmark,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -41,6 +42,7 @@ const mainNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: NewspaperIcon, label: "My Posts", href: "/all_posts" },
   { icon: PenSquare, label: "Create Post", href: "/create" },
+  { icon: Bookmark, label: "Bookmarks", href: "/bookmarks" },
 ]
 
 const exploreNavItems = [

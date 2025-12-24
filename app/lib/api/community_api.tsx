@@ -17,6 +17,7 @@ export type FriendRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED";
 
 export interface UserBasicInfo {
   id: number;
+  friend_request_id: number;
   name: string;
   email: string;
   bio: string | null;

@@ -62,6 +62,7 @@ export interface Post {
   comments_count: number
   likes_count: number
   dislikes_count: number
+  views_count: number
 }
 
 // ===============================

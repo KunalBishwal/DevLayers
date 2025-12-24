@@ -50,6 +50,8 @@ export interface APIPost {
   }[]
   likes_count: number
   comments_count: number
+  dislikes_count: number
+  views_count: number
 }
 
 

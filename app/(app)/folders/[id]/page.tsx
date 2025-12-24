@@ -145,7 +145,7 @@ export default function FolderPage() {
 
         return {
           id: p.id.toString(),
-          day: index + 1, 
+          day: p.id, 
           title: p.title,
           content: p.body, 
           date: new Date(p.created_at).toLocaleDateString(),
@@ -160,7 +160,8 @@ export default function FolderPage() {
           comments: p.comments_count,
           tags: Array.isArray(p.tags) ? p.tags : (p.tags ? p.tags.split(',').map((t: string) => t.trim()) : []),
           links: p.links || [], 
-          rawVisibility: p.visibility 
+          rawVisibility: p.visibility,
+          views: p.views_count
         }
       })
 

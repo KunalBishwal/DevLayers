@@ -45,6 +45,7 @@ export default function CommunityPage() {
   const [token, setToken] = useState<string | null>(null);
 
   const getValidCache = useCallback((key: string) => {
+    if (typeof window === "undefined") return null;
     const cached = localStorage.getItem(`${key}_${userId}`);
     if (!cached) return null;
     try {
@@ -109,6 +110,8 @@ export default function CommunityPage() {
     return networkData?.following_list?.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())) || [];
   }, [networkData, searchQuery]);
 
+  // --- ACTION HANDLERS ---
+
   const handleUnfollow = async (targetId: number) => {
     if (!token) return;
     try {
@@ -128,7 +131,7 @@ export default function CommunityPage() {
     try {
       await respondFriendRequest(id, "accept", token!);
       toast.success("Accepted");
-      fetchData();
+      fetchData(true); // Hard refresh to update both lists/stats
     } catch (error) {
       toast.error("Failed to accept");
     }
@@ -138,9 +141,21 @@ export default function CommunityPage() {
     try {
       await deleteFriendRequest(id, token!);
       toast.success("Rejected");
-      fetchData();
+      fetchData(true);
     } catch (error) {
       toast.error("Failed to reject");
+    }
+  };
+
+  const handleUnfriend = async (friendshipId: number) => {
+    if (!token) return;
+    try {
+      // Reusing deleteFriendRequest logic as unfriend
+      await deleteFriendRequest(friendshipId, token);
+      toast.success("Unfriended");
+      fetchData(true);
+    } catch (error) {
+      toast.error("Failed to unfriend");
     }
   };
 
@@ -176,6 +191,7 @@ export default function CommunityPage() {
             </div>
             <Button 
               size="icon" 
+              variant="outline"
               className="rounded-lg bg-background"
               onClick={() => fetchData(true)}
               disabled={refreshing}
@@ -200,7 +216,7 @@ export default function CommunityPage() {
           </TabsList>
 
           <TabsContent value="friends" className="space-y-8">
-            {/* Pending Requests Section */}
+            {/* Pending Requests */}
             {friendData?.pending_requests && friendData.pending_requests.length > 0 && (
               <section className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pending Requests</h3>
@@ -209,7 +225,6 @@ export default function CommunityPage() {
                     <UserCard 
                       key={req.id} 
                       requestId={req.id}
-                      // Pass target ID so clicking the card goes to the right profile
                       targetUserId={req.sender_id === userId ? req.receiver_id : req.sender_id}
                       accept_friend_request={accept_friend_request}
                       reject_friend_request={reject_friend_request}
@@ -223,7 +238,7 @@ export default function CommunityPage() {
               </section>
             )}
 
-            {/* Friends List Section */}
+            {/* Friends List */}
             <section className="space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">All Friends</h3>
               {filteredFriends.length === 0 ? (
@@ -234,7 +249,13 @@ export default function CommunityPage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredFriends.map((friend) => (
-                    <UserCard key={friend.id} targetUserId={friend.id} user={friend} />
+                    <UserCard 
+                      key={friend.id} 
+                      targetUserId={friend.id} 
+                      user={friend} 
+                      isFriend={true}
+                      onUnfriend={() => handleUnfriend(friend.friend_request_id)}
+                    />
                   ))}
                 </div>
               )}
@@ -263,9 +284,11 @@ export default function CommunityPage() {
   );
 }
 
+// --- SUB-COMPONENTS ---
+
 function StatCard({ label, count, highlight = false }: { label: string, count: number, highlight?: boolean }) {
   return (
-    <Card className={`border-none shadow-sm ${highlight ? 'bg-primary text-primary-foreground' : 'bg-background'}`}>
+    <Card className={`border-none shadow-sm transition-all hover:shadow-md ${highlight ? 'bg-primary text-primary-foreground' : 'bg-background'}`}>
       <CardContent className="p-4 flex flex-col items-center justify-center">
         <p className="text-2xl font-black leading-none mb-1">{count}</p>
         <p className="text-[10px] uppercase font-bold tracking-tighter opacity-80">{label}</p>
@@ -274,7 +297,21 @@ function StatCard({ label, count, highlight = false }: { label: string, count: n
   );
 }
 
-function UserCard({ requestId, targetUserId, accept_friend_request, reject_friend_request, user, name, image, isRequest, isOutgoing, showUnfollow, onUnfollow }: any) {
+function UserCard({ 
+  requestId, 
+  targetUserId, 
+  accept_friend_request, 
+  reject_friend_request, 
+  user, 
+  name, 
+  image, 
+  isRequest, 
+  isOutgoing, 
+  showUnfollow, 
+  onUnfollow,
+  isFriend,
+  onUnfriend
+}: any) {
   const router = useRouter();
   
   const finalUserId = targetUserId || user?.id;
@@ -282,11 +319,7 @@ function UserCard({ requestId, targetUserId, accept_friend_request, reject_frien
   const displayImg = user?.profile_photo_url || image;
 
   const handleCardClick = () => {
-    if (finalUserId) {
-      router.push(`/profile/${finalUserId}`);
-    } else {
-      toast.error("Profile link unavailable");
-    }
+    if (finalUserId) router.push(`/profile/${finalUserId}`);
   };
 
   return (
@@ -295,55 +328,61 @@ function UserCard({ requestId, targetUserId, accept_friend_request, reject_frien
       onClick={handleCardClick}
     >
       <div className="flex items-center gap-4">
-        <Avatar className="h-12 w-12 border-2 border-background">
+        <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
           <AvatarImage src={displayImg || ""} alt={displayName} />
           <AvatarFallback className="bg-primary/5 text-primary font-bold">{displayName?.charAt(0)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
           <p className="font-bold text-sm tracking-tight truncate">{displayName}</p>
           <p className="text-xs text-muted-foreground line-clamp-1">
-            {isOutgoing ? "Request Sent" : user?.bio || "Community Member"}
+            {isOutgoing ? "Pending invitation..." : user?.bio || "Community Member"}
           </p>
         </div>
       </div>
       
-      {/* Action Buttons with StopPropagation */}
+      {/* Actions */}
       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        {/* Friend Request Response */}
         {isRequest && (
           <div className="flex gap-1">
              <Button 
                size="icon" 
                variant="ghost" 
-               className="text-green-600 hover:text-green-700 hover:bg-green-50" 
-               onClick={(e) => {
-                 e.stopPropagation(); // Explicitly stop bubble
-                 accept_friend_request(requestId);
-               }}
+               className="text-green-600 hover:text-green-700 hover:bg-green-50 rounded-full" 
+               onClick={() => accept_friend_request(requestId)}
              >
                <CheckCircle2 className="w-5 h-5" />
              </Button>
              <Button 
                size="icon" 
                variant="ghost" 
-               className="text-red-600 hover:text-red-700 hover:bg-red-50" 
-               onClick={(e) => {
-                 e.stopPropagation(); // Explicitly stop bubble
-                 reject_friend_request(requestId);
-               }}
+               className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-full" 
+               onClick={() => reject_friend_request(requestId)}
              >
                <XCircle className="w-5 h-5" />
              </Button>
           </div>
         )}
+
+        {/* Unfriend Option */}
+        {isFriend && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onUnfriend} 
+            className="h-8 text-xs font-bold text-muted-foreground hover:text-red-600 hover:bg-red-50"
+          >
+            Unfriend
+          </Button>
+        )}
+
+        {/* Unfollow Option */}
         {showUnfollow && (
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={(e) => {
-              e.stopPropagation(); // Stop redirection
-              onUnfollow();
-            }} 
-            className="h-8 text-xs font-bold text-muted-foreground hover:text-red-600"
+            onClick={onUnfollow} 
+            className="h-8 text-xs font-bold text-muted-foreground hover:text-red-600 hover:bg-red-50"
           >
             Unfollow
           </Button>

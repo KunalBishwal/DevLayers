@@ -39,7 +39,7 @@ export function Timeline({ posts, className, onEdit, onDelete, isOwner = false }
   return (
     <div className={cn("relative", className)}>
       <div className="absolute left-2 top-8 bottom-8 w-0.5 bg-gradient-to-b from-primary via-primary/50 to-transparent" />
-
+      {console.log("Posts in Timeline:", posts)}
       <div className="space-y-8 stagger-children">
         {posts.map((post) => (
           <div key={post.id} className="relative pl-8">

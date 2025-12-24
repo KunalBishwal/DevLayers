@@ -359,7 +359,8 @@ export default function SearchPage() {
                       <PostCard 
                         key={post.id} 
                         id={post.id.toString()}
-                        day={1}
+                        day={post.id}
+                        views={post.views_count}
                         title={post.title}
                         content={post.body}
                         author={{ name: post.author.name, avatar: post.author.profile_photo_url }}
