@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   keywords: ["developer", "learning", "projects", "logs", "social", "journaling"],
   authors: [{ name: "DevLayers" }],
   icons: {
-    icon: "/devlayers-icon.png",
-    apple: "/devlayers-icon.png",
+    icon: "/icon.png",
+    apple: "/icon.png",
   },
 }
 

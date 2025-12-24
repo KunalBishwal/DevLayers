@@ -1,29 +1,21 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import Link from "next/link";
 import { 
-  ArrowLeft, 
-  Users, 
-  UserPlus, 
   Loader2, 
   Search,
-  MoreHorizontal,
-  UserMinus,
   RefreshCw,
   User as UserIcon,
-  ShieldCheck,
   CheckCircle2,
   XCircle
 } from "lucide-react";
 import { useUser } from "@/context/user-context";
-
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 // --- API FUNCTIONS ---
@@ -32,17 +24,18 @@ import {
   getUserFriendsAndRequests,
   FollowingFollowersResponse,
   FriendFriendRequestResponse,
-  UserBasicInfo
 } from "@/app/lib/api/community_api"; 
 import { UnfollowTargetProfile } from "@/app/lib/api/follow_api";
+import { respondFriendRequest, deleteFriendRequest } from "@/app/lib/api/friends_api";
 
 const CACHE_KEY_NETWORK = "community_network_cache";
 const CACHE_KEY_FRIENDS = "community_friends_cache";
-const TWO_HOURS_IN_MS = 30 * 60 * 1000;//set to 30 minutes caching
+const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 
 export default function CommunityPage() {
   const { user } = useUser();
   const userId = user?.id || 0;
+  const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,30 +44,18 @@ export default function CommunityPage() {
   const [friendData, setFriendData] = useState<FriendFriendRequestResponse | null>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  /**
-   * Helper: Get cached data if it's not expired
-   */
   const getValidCache = useCallback((key: string) => {
     const cached = localStorage.getItem(`${key}_${userId}`);
     if (!cached) return null;
-
     try {
       const parsed = JSON.parse(cached);
-      const isExpired = Date.now() - parsed.timestamp > TWO_HOURS_IN_MS;
-      
-      if (isExpired) {
-        console.log(`Cache for ${key} expired. Calling API...`);
-        return null;
-      }
+      if (Date.now() - parsed.timestamp > CACHE_EXPIRY_MS) return null;
       return parsed.data;
     } catch (e) {
       return null;
     }
   }, [userId]);
 
-  /**
-   * Core Fetch & Cache Logic
-   */
   const fetchData = useCallback(async (isManualRefresh = false) => {
     const storedToken = localStorage.getItem("token");
     if (!storedToken) return;
@@ -90,12 +71,11 @@ export default function CommunityPage() {
       setNetworkData(network);
       setFriendData(friends);
 
-      // Save with Timestamp
       const timestamp = Date.now();
       localStorage.setItem(`${CACHE_KEY_NETWORK}_${userId}`, JSON.stringify({ data: network, timestamp }));
       localStorage.setItem(`${CACHE_KEY_FRIENDS}_${userId}`, JSON.stringify({ data: friends, timestamp }));
 
-      if (isManualRefresh) toast.success("Data synced with server");
+      if (isManualRefresh) toast.success("Network Synced");
     } catch (error) {
       console.error("Sync error:", error);
       if (isManualRefresh) toast.error("Sync failed");
@@ -113,27 +93,20 @@ export default function CommunityPage() {
     const cachedFri = getValidCache(CACHE_KEY_FRIENDS);
 
     if (cachedNet && cachedFri) {
-      // Use valid cache immediately
       setNetworkData(cachedNet);
       setFriendData(cachedFri);
       setLoading(false);
     } else {
-      // Fetch fresh if no cache or cache expired
       fetchData();
     }
   }, [fetchData, getValidCache]);
 
-  /**
-   * Search Filters
-   */
   const filteredFriends = useMemo(() => {
-    if (!friendData?.friends_list) return [];
-    return friendData.friends_list.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    return friendData?.friends_list?.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())) || [];
   }, [friendData, searchQuery]);
 
   const filteredFollowing = useMemo(() => {
-    if (!networkData?.following_list) return [];
-    return networkData.following_list.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    return networkData?.following_list?.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())) || [];
   }, [networkData, searchQuery]);
 
   const handleUnfollow = async (targetId: number) => {
@@ -151,11 +124,31 @@ export default function CommunityPage() {
     }
   };
 
+  const accept_friend_request = async (id: number) => {
+    try {
+      await respondFriendRequest(id, "accept", token!);
+      toast.success("Accepted");
+      fetchData();
+    } catch (error) {
+      toast.error("Failed to accept");
+    }
+  };
+
+  const reject_friend_request = async (id: number) => {
+    try {
+      await deleteFriendRequest(id, token!);
+      toast.success("Rejected");
+      fetchData();
+    } catch (error) {
+      toast.error("Failed to reject");
+    }
+  };
+
   if (loading && !networkData) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-4">
         <Loader2 className="w-10 h-10 animate-spin text-primary/50" />
-        <p className="text-sm font-medium text-muted-foreground animate-pulse">Syncing your network...</p>
+        <p className="text-sm font-medium text-muted-foreground">Syncing network...</p>
       </div>
     );
   }
@@ -164,13 +157,11 @@ export default function CommunityPage() {
     <div className="min-h-screen bg-background/50 pb-20">
       <div className="max-w-5xl mx-auto px-6 pt-10 space-y-8">
         
-        {/* Header (Design Same as Prev) */}
+        {/* Header */}
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-black tracking-tight">Community</h1>
-              <p className="text-sm text-muted-foreground">Manage your connections</p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-black tracking-tight">Community</h1>
+            <p className="text-sm text-muted-foreground">Manage your connections</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -189,12 +180,12 @@ export default function CommunityPage() {
               onClick={() => fetchData(true)}
               disabled={refreshing}
             >
-              <RefreshCw className={`text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 text-blue-600 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
           </div>
         </header>
 
-        {/* Stats Grid */}
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Friends" count={friendData?.friends_count || 0} />
           <StatCard label="Following" count={networkData?.following_count || 0} />
@@ -208,7 +199,8 @@ export default function CommunityPage() {
             <TabsTrigger value="network" className="px-8 rounded-lg">Network</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="friends" className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+          <TabsContent value="friends" className="space-y-8">
+            {/* Pending Requests Section */}
             {friendData?.pending_requests && friendData.pending_requests.length > 0 && (
               <section className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pending Requests</h3>
@@ -216,6 +208,11 @@ export default function CommunityPage() {
                   {friendData.pending_requests.map((req) => (
                     <UserCard 
                       key={req.id} 
+                      requestId={req.id}
+                      // Pass target ID so clicking the card goes to the right profile
+                      targetUserId={req.sender_id === userId ? req.receiver_id : req.sender_id}
+                      accept_friend_request={accept_friend_request}
+                      reject_friend_request={reject_friend_request}
                       name={req.sender_id === userId ? req.receiver_name : req.sender_name} 
                       image={req.sender_id === userId ? req.receiver_profile_photo : req.sender_profile_photo}
                       isRequest={req.sender_id !== userId}
@@ -226,17 +223,18 @@ export default function CommunityPage() {
               </section>
             )}
 
+            {/* Friends List Section */}
             <section className="space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">All Friends</h3>
               {filteredFriends.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 bg-background/40 border-2 border-dashed rounded-3xl">
                   <UserIcon className="w-10 h-10 text-muted-foreground/20 mb-3" />
-                  <p className="text-sm font-medium text-muted-foreground">No matches found</p>
+                  <p className="text-sm font-medium text-muted-foreground">No connections yet</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredFriends.map((friend) => (
-                    <UserCard key={friend.id} user={friend} />
+                    <UserCard key={friend.id} targetUserId={friend.id} user={friend} />
                   ))}
                 </div>
               )}
@@ -248,13 +246,13 @@ export default function CommunityPage() {
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Following</h3>
                 {filteredFollowing.map((u) => (
-                  <UserCard key={u.id} user={u} showUnfollow onUnfollow={() => handleUnfollow(u.id)} />
+                  <UserCard key={u.id} targetUserId={u.id} user={u} showUnfollow onUnfollow={() => handleUnfollow(u.id)} />
                 ))}
               </div>
               <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Followers</h3>
                 {networkData?.followers_list.map((u) => (
-                  <UserCard key={u.id} user={u} />
+                  <UserCard key={u.id} targetUserId={u.id} user={u} />
                 ))}
               </div>
             </div>
@@ -265,48 +263,90 @@ export default function CommunityPage() {
   );
 }
 
-// Sub-components kept identical to maintain design...
 function StatCard({ label, count, highlight = false }: { label: string, count: number, highlight?: boolean }) {
   return (
-    <Card className={`border-none shadow-sm ${highlight ? 'bg-primary text-primary-foreground' : 'bg-background'} transition-colors`}>
+    <Card className={`border-none shadow-sm ${highlight ? 'bg-primary text-primary-foreground' : 'bg-background'}`}>
       <CardContent className="p-4 flex flex-col items-center justify-center">
         <p className="text-2xl font-black leading-none mb-1">{count}</p>
-        <p className={`text-[10px] uppercase font-bold tracking-tighter opacity-80`}>{label}</p>
+        <p className="text-[10px] uppercase font-bold tracking-tighter opacity-80">{label}</p>
       </CardContent>
     </Card>
   );
 }
 
-function UserCard({ user, name, image, isRequest, isOutgoing, showUnfollow, onUnfollow }: any) {
-  const [isActionLoading, setIsActionLoading] = useState(false);
+function UserCard({ requestId, targetUserId, accept_friend_request, reject_friend_request, user, name, image, isRequest, isOutgoing, showUnfollow, onUnfollow }: any) {
+  const router = useRouter();
+  
+  const finalUserId = targetUserId || user?.id;
   const displayName = user?.name || name;
   const displayImg = user?.profile_photo_url || image;
 
+  const handleCardClick = () => {
+    if (finalUserId) {
+      router.push(`/profile/${finalUserId}`);
+    } else {
+      toast.error("Profile link unavailable");
+    }
+  };
+
   return (
-    <div className="group relative flex items-center justify-between p-4 rounded-2xl border bg-background hover:border-primary/40 transition-all duration-300">
+    <div 
+      className="group relative flex items-center justify-between p-4 rounded-2xl border bg-background hover:border-primary/40 transition-all duration-300 cursor-pointer" 
+      onClick={handleCardClick}
+    >
       <div className="flex items-center gap-4">
         <Avatar className="h-12 w-12 border-2 border-background">
           <AvatarImage src={displayImg || ""} alt={displayName} />
           <AvatarFallback className="bg-primary/5 text-primary font-bold">{displayName?.charAt(0)}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">
-          <div className="flex items-center gap-1">
-            <p className="font-bold text-sm tracking-tight truncate">{displayName}</p>
-          </div>
+          <p className="font-bold text-sm tracking-tight truncate">{displayName}</p>
           <p className="text-xs text-muted-foreground line-clamp-1">
             {isOutgoing ? "Request Sent" : user?.bio || "Community Member"}
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      
+      {/* Action Buttons with StopPropagation */}
+      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
         {isRequest && (
           <div className="flex gap-1">
-             <Button size="icon" variant="ghost" className="text-primary"><CheckCircle2 className="w-5 h-5" /></Button>
-             <Button size="icon" variant="ghost" className="text-white"><XCircle className="w-5 h-5" /></Button>
+             <Button 
+               size="icon" 
+               variant="ghost" 
+               className="text-green-600 hover:text-green-700 hover:bg-green-50" 
+               onClick={(e) => {
+                 e.stopPropagation(); // Explicitly stop bubble
+                 accept_friend_request(requestId);
+               }}
+             >
+               <CheckCircle2 className="w-5 h-5" />
+             </Button>
+             <Button 
+               size="icon" 
+               variant="ghost" 
+               className="text-red-600 hover:text-red-700 hover:bg-red-50" 
+               onClick={(e) => {
+                 e.stopPropagation(); // Explicitly stop bubble
+                 reject_friend_request(requestId);
+               }}
+             >
+               <XCircle className="w-5 h-5" />
+             </Button>
           </div>
         )}
         {showUnfollow && (
-          <Button variant="ghost" size="sm" onClick={onUnfollow} className="h-8 text-xs font-bold text-muted-foreground">Unfollow</Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={(e) => {
+              e.stopPropagation(); // Stop redirection
+              onUnfollow();
+            }} 
+            className="h-8 text-xs font-bold text-muted-foreground hover:text-red-600"
+          >
+            Unfollow
+          </Button>
         )}
       </div>
     </div>

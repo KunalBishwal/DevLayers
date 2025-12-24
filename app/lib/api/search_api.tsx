@@ -1,7 +1,11 @@
 // @/lib/searchapi.ts
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
+// ===============================
+// COMMON TYPES
+// ===============================
 
 export interface Folder {
   id: number
@@ -18,6 +22,10 @@ export interface User {
   profile_photo_url: string
 }
 
+// ===============================
+// POST-RELATED TYPES
+// ===============================
+
 export interface PostImage {
   id?: number
   url: string
@@ -29,21 +37,36 @@ export interface PostLink {
   url: string
 }
 
+export interface PostAuthor {
+  id: number
+  name: string
+  profile_photo_url: string
+}
+
 export interface Post {
   id: number
   title: string
   body: string
   tags: string | string[]
   visibility: "public" | "private" | "anonymous"
-  author_id: number
+
+  // 👇 NEW (replaces author_id)
+  author: PostAuthor
+
   folder_id: number | null
   created_at: string
+
   images: PostImage[]
   links: PostLink[]
-  comments_count:number,
-  likes_count:number
-  dislikes_count:number
+
+  comments_count: number
+  likes_count: number
+  dislikes_count: number
 }
+
+// ===============================
+// SEARCH RESPONSE
+// ===============================
 
 export interface SearchResponse {
   query: string
@@ -52,16 +75,26 @@ export interface SearchResponse {
   posts: Post[]
 }
 
-export const searchContent = async (query: string): Promise<SearchResponse> => {
-  const response = await fetch(`${API_BASE_URL}/search/all?q=${encodeURIComponent(query)}`)
+// ===============================
+// SEARCH API
+// ===============================
+
+export const searchContent = async (
+  query: string
+): Promise<SearchResponse> => {
+  const response = await fetch(
+    `${API_BASE_URL}/search/all?q=${encodeURIComponent(query)}`
+  )
+
   if (!response.ok) {
     throw new Error("Failed to fetch search results")
   }
+
   return response.json()
 }
 
 // ==========================================
-//  searrch by user id
+// USER PROFILE (BY USER ID)
 // ==========================================
 
 export interface ProfileFolder {
@@ -81,34 +114,50 @@ export interface ProfilePost {
   images: PostImage[]
   links: PostLink[]
 }
-export interface social_links_interface{
-  label:string,
-  url:string
+
+export interface SocialLink {
+  label: string
+  url: string
 }
 
 export interface UserProfile extends User {
   bio: string
   created_at: string
+
   folders: ProfileFolder[]
   posts: ProfilePost[]
-  followers:number,
-  is_follower:boolean,
-  social_links:social_links_interface[],
-  friendship_status:"pending_recieved" | "none" | "pending_sent" | "friends"
+
+  followers: number
+  is_follower: boolean
+
+  social_links: SocialLink[]
+
+  friendship_status:
+    | "pending_recieved"
+    | "none"
+    | "pending_sent"
+    | "friends"
 }
 
-export const getUserProfile = async (userId: string | number,token:string): Promise<UserProfile> => {
+// ===============================
+// USER PROFILE API
+// ===============================
+
+export const getUserProfile = async (
+  userId: string | number,
+  token: string
+): Promise<UserProfile> => {
   const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
-    method: 'GET',
+    method: "GET",
     headers: {
-      'accept': 'application/json',
+      accept: "application/json",
       Authorization: `Bearer ${token}`,
-    }
+    },
   })
 
   if (!response.ok) {
     throw new Error("Failed to fetch user profile")
   }
-  
+
   return response.json()
 }

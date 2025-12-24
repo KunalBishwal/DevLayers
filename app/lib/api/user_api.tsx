@@ -48,6 +48,8 @@ export interface APIPost {
     label: string  // Backend usually sends a label for links
     url: string 
   }[]
+  likes_count: number
+  comments_count: number
 }
 
 

@@ -1,6 +1,6 @@
+"use client"
 
 import { cn } from "@/app/lib/utils"
-import { Logo } from "./logo"
 import { ThemeToggle } from "./theme-toggle"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -14,20 +14,17 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  Bell,
-  BookOpen,
-  Code,
   AlertCircle,
   NewspaperIcon,
   UsersRound,
-  Folder, // Added for potential error state, though signout is mostly local
+  Folder,
 } from "lucide-react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation" // Import useRouter
+import Image from "next/image"
+import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { useUser } from "@/context/user-context"
 
-// Define the API Base URL (used for the signout call)
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 interface SidebarProps {
@@ -40,222 +37,216 @@ interface SidebarProps {
   className?: string
 }
 
-const navItems = [
+const mainNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  {icon:NewspaperIcon,label:"My Posts",href:"/all_posts"},
+  { icon: NewspaperIcon, label: "My Posts", href: "/all_posts" },
   { icon: PenSquare, label: "Create Post", href: "/create" },
+]
+
+const exploreNavItems = [
   { icon: Globe, label: "Explore", href: "/explore" },
   { icon: Search, label: "Search", href: "/search" },
   { icon: UsersRound, label: "Community", href: "/community" },
-  
 ]
 
 export function Sidebar({ user, className }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-
   const [collapsed, setCollapsed] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  //recent folder
-  const {folders} = useUser()
-
+  const { folders } = useUser()
 
   const handleSignOut = async () => {
     setIsSigningOut(true)
     setError(null)
-    
-    // 1. Get the current token
     const token = localStorage.getItem("token")
-
     try {
-      // 2. Call the signout API endpoint (optional but good practice to invalidate server-side session/token)
       if (token) {
-        // The API specified doesn't require a body, just an auth token, but since it's a POST, we include a minimal header
-        const response = await fetch(`${API_BASE_URL}/auth/signout`, {
+        await fetch(`${API_BASE_URL}/auth/signout`, {
           method: "POST",
-          headers: {
-            // Note: Your curl example did not include an Authorization header.
-            // In a real scenario, you should send the access token here,
-            // typically in the Authorization: Bearer <token> header.
-            // For this example, we'll only send the Content-Type header as per your provided curl data.
-            "Content-Type": "application/json", 
-          },
+          headers: { "Content-Type": "application/json" },
         })
-
-        // Handle successful signout message from the API
-        if (!response.ok) {
-           // We can log the error but still proceed with local signout
-           console.error("Server signout failed but proceeding with local signout.")
-        }
       }
-
     } catch (err) {
-      // Handle network errors
-      setError("Network error during signout. Logging out locally.")
+      setError("Logout failed. Local session cleared.")
     } finally {
-      // 3. Clear the token and local user data
       localStorage.removeItem("token")
       localStorage.removeItem("user_cache")
-
-      // 4. Redirect to the login page
       router.push("/login")
-      
       setIsSigningOut(false)
     }
+  }
+
+  const NavItem = ({ item }: { item: typeof mainNavItems[0] }) => {
+    const isActive = pathname === item.href
+    return (
+      <Link href={item.href} className="relative group">
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full justify-start gap-3 transition-all duration-200 mb-1 relative overflow-hidden",
+            isActive 
+              ? "bg-primary/10 text-primary hover:bg-primary/15 font-semibold" 
+              : "text-muted-foreground hover:text-foreground hover:bg-accent",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          {isActive && !collapsed && (
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-primary rounded-r-full" />
+          )}
+          <item.icon className={cn("w-5 h-5 shrink-0 transition-transform", !isActive && "group-hover:scale-110")} />
+          {!collapsed && <span className="text-[14px]">{item.label}</span>}
+        </Button>
+      </Link>
+    )
   }
 
   return (
     <aside
       className={cn(
-        "flex flex-col h-screen border-r border-border bg-card/50 backdrop-blur-sm",
-        "transition-all duration-300 ease-out",
-        collapsed ? "w-[72px]" : "w-[260px]",
+        "flex flex-col h-screen border-r border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+        "transition-all duration-300 ease-in-out",
+        collapsed ? "w-[80px]" : "w-[280px]",
         className,
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <Link href="/dashboard" className="flex items-center gap-2 group">
-          <Logo size="sm" showText={!collapsed} />
-        </Link>
-        <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => setCollapsed(!collapsed)}>
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </Button>
+      {/* Header Section: Swaps between Logo and Expand Button */}
+      <div className={cn(
+        "h-[70px] flex items-center border-b border-border/50 px-4 transition-all duration-300",
+        collapsed ? "justify-center" : "justify-between"
+      )}>
+        {!collapsed ? (
+          <>
+            <Link href="/dashboard" className="flex items-center gap-3 group px-2">
+              <div className="relative w-8 h-8 shrink-0">
+                <Image 
+                  src="/icon.png" 
+                  alt="Develayers Logo" 
+                  fill 
+                  className="object-contain"
+                />
+              </div>
+              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                Develayers
+              </span>
+            </Link>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="w-8 h-8 rounded-full hover:bg-accent shrink-0" 
+              onClick={() => setCollapsed(true)}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+          </>
+        ) : (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="w-12 h-12 rounded-xl bg-primary/5 hover:bg-primary/10 text-primary border border-primary/10 transition-all" 
+            onClick={() => setCollapsed(false)}
+          >
+            <ChevronRight className="w-6 h-6" />
+          </Button>
+        )}
       </div>
 
-      {/* User profile */}
+      {/* Profile Section */}
       {user && (
-        <div className={cn("p-4 border-b border-border", collapsed && "flex justify-center")}>
-          <div className={cn("flex items-center gap-3", collapsed && "flex-col")}>
-            <Avatar className="w-10 h-10 ring-2 ring-primary/20">
-              <AvatarImage
-                src={user.avatar || "/placeholder.svg?height=40&width=40&query=indian man developer"}
-                alt={user.name}
-              />
-              <AvatarFallback className="bg-primary/10 text-primary">
+        <div className={cn("p-4 mx-2 mt-4 rounded-xl transition-all duration-300", !collapsed && "bg-accent/30")}>
+          <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+            <Avatar className="w-10 h-10 border-2 border-background shadow-sm shrink-0">
+              <AvatarImage src={user.avatar} alt={user.name} />
+              <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
                 {user.name.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{user.name}</p>
-                <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
+                <p className="font-semibold text-sm leading-none truncate">{user.name}</p>
+                <p className="text-xs text-muted-foreground truncate mt-1">@{user.username}</p>
               </div>
             )}
           </div>
 
-          {/* Streak indicator */}
           {!collapsed && user.streak > 0 && (
-            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10">
-              <Flame className="w-4 h-4 text-orange-500" />
-              <span className="text-sm font-medium text-orange-500">{user.streak} day streak</span>
-            </div>
-          )}
-          {collapsed && user.streak > 0 && (
-            <div className="mt-2 flex items-center justify-center gap-1 text-orange-500">
-              <Flame className="w-4 h-4" />
-              <span className="text-xs font-bold">{user.streak}</span>
+            <div className="mt-3 flex items-center justify-between px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <div className="flex items-center gap-2">
+                <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500" />
+                <span className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">Streak</span>
+              </div>
+              <span className="text-sm font-black text-orange-600">{user.streak}</span>
             </div>
           )}
         </div>
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link key={item.href} href={item.href}>
-              <Button
-                variant={isActive ? "secondary" : "ghost"}
-                className={cn(
-                  "w-full justify-start gap-3 transition-all duration-200",
-                  isActive && "bg-primary/10 text-primary hover:bg-primary/15",
-                  collapsed && "justify-center px-2",
-                )}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
-              </Button>
-            </Link>
-          )
-        })}
+      <nav className="flex-1 px-3 mt-4 space-y-6 overflow-y-auto no-scrollbar">
+        <div>
+          {!collapsed && <p className="text-[10px] font-bold text-muted-foreground/50 px-3 mb-2 uppercase tracking-[0.2em]">General</p>}
+          {mainNavItems.map((item) => <NavItem key={item.href} item={item} />)}
+        </div>
+
+        <div>
+          {!collapsed && <p className="text-[10px] font-bold text-muted-foreground/50 px-3 mb-2 uppercase tracking-[0.2em]">Discovery</p>}
+          {exploreNavItems.map((item) => <NavItem key={item.href} item={item} />)}
+        </div>
+
+        {!collapsed && folders && folders.length > 0 && (
+          <div className="pt-2">
+            <p className="text-[10px] font-bold text-muted-foreground/50 px-3 mb-2 uppercase tracking-[0.2em]">Recent Folders</p>
+            <div className="space-y-0.5">
+              {folders.slice(0, 3).map((folder) => (
+                <Button key={folder.id} variant="ghost" className="w-full justify-start gap-3 h-8 text-[13px] text-muted-foreground hover:text-primary"
+                onClick={() => router.push(`/folders/${folder.id}`)}>
+                  <Folder className="w-4 h-4 text-primary/60" />
+                  <span className="truncate font-normal">{folder.name}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* Quick folder access */}
-      {!collapsed && (
-        <div className="p-4 border-t border-border">
-          <p className="text-xs font-medium text-muted-foreground mb-2 px-2">
-            RECENT FOLDERS
-          </p>
-
-          <div className="space-y-1">
-            {folders && folders.length > 0 ? (
-              folders.slice(0, 2).map((folder) => (
-                <Button
-                  key={folder.id}
-                  variant="ghost"
-                  className="w-full justify-start gap-2 h-9 text-sm"
-                >
-                  <Folder className="w-4 h-4 text-primary" />
-                  <span className="truncate">{folder.name}</span>
-                </Button>
-              ))
-            ) : (
-              <div className="text-xs text-muted-foreground italic px-2">
-                No recent folders.
-              </div>
-            )}
-          </div>
+      {/* Bottom Footer Section */}
+      <div className="p-3 border-t border-border/50 space-y-1">
+        <div className={cn("flex items-center mb-2 px-2", collapsed ? "justify-center" : "justify-between")}>
+          {!collapsed && <span className="text-xs font-medium text-muted-foreground">Theme</span>}
+          <ThemeToggle />
         </div>
-      )}
 
-      
-      {/* Error display (if any) */}
-      {error && !collapsed && (
-          <div className="p-2 text-sm text-red-500 flex items-center gap-1">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span className="text-xs">{error}</span>
-          </div>
-        )}
-
-      {/* Footer actions - Added ThemeToggle */}
-      <div className="p-2 border-t border-border">
-        {!collapsed && (
-          <div className="flex items-center justify-between px-2 py-1 mb-1">
-            <span className="text-xs text-muted-foreground">Theme</span>
-            <ThemeToggle />
-          </div>
-        )}
-        {collapsed && (
-          <div className="flex justify-center mb-1">
-            <ThemeToggle />
-          </div>
-        )}
         <Link href="/settings">
-          <Button variant="ghost" className={cn("w-full justify-start gap-3", collapsed && "justify-center px-2")}>
-            <Settings className="w-5 h-5 shrink-0" />
-            {!collapsed && <span>Settings</span>}
+          <Button variant="ghost" className={cn("w-full justify-start gap-3 text-muted-foreground", collapsed && "justify-center")}>
+            <Settings className="w-5 h-5" />
+            {!collapsed && <span className="text-sm">Settings</span>}
           </Button>
         </Link>
+
         <Button
-          onClick={handleSignOut} // Attached the signout handler
+          onClick={handleSignOut}
           variant="ghost"
-          className={cn(
-            "w-full justify-start gap-3 text-muted-foreground hover:text-destructive",
-            collapsed && "justify-center px-2",
-          )}
           disabled={isSigningOut}
+          className={cn(
+            "w-full justify-start gap-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors",
+            collapsed && "justify-center"
+          )}
         >
           {isSigningOut ? (
-            <div className="w-5 h-5 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin shrink-0" />
+            <div className="w-5 h-5 border-2 border-destructive/30 border-t-destructive rounded-full animate-spin" />
           ) : (
-            <LogOut className="w-5 h-5 shrink-0" />
+            <LogOut className="w-5 h-5" />
           )}
-          {!collapsed && <span>{isSigningOut ? "Signing Out..." : "Sign Out"}</span>}
+          {!collapsed && <span className="text-sm">Sign Out</span>}
         </Button>
+        
+        {error && !collapsed && (
+          <div className="mt-2 p-2 rounded-lg bg-destructive/10 flex items-center gap-2 text-destructive border border-destructive/20">
+            <AlertCircle className="w-3 h-3 shrink-0" />
+            <span className="text-[10px] font-bold uppercase leading-none">{error}</span>
+          </div>
+        )}
       </div>
     </aside>
   )

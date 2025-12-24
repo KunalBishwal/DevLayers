@@ -31,7 +31,6 @@ export default function DashboardPage() {
   const router = useRouter()
   const { user, folders, socialLinks, isLoading, refreshUser } = useUser()
 
-  const [view, setView] = useState<"grid" | "list">("grid")
   const [activeTab, setActiveTab] = useState("all") 
 
   // --- Create Folder States ---
@@ -326,15 +325,6 @@ export default function DashboardPage() {
               <TabsTrigger value="private">Private</TabsTrigger>
             </TabsList>
           </Tabs>
-
-          <div className="flex items-center gap-2">
-            <Button variant={view === "grid" ? "secondary" : "ghost"} size="icon" onClick={() => setView("grid")}>
-              <Grid3X3 className="w-4 h-4" />
-            </Button>
-            <Button variant={view === "list" ? "secondary" : "ghost"} size="icon" onClick={() => setView("list")}>
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
         </div>
 
         {folders.length === 0 ? (
@@ -350,7 +340,7 @@ export default function DashboardPage() {
             <h3 className="text-lg font-medium text-muted-foreground">No {activeTab} folders found</h3>
           </div>
         ) : (
-          <div className={view === "grid" ? "grid md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredFolders.map((folder) => (
               <div key={folder.id} className="relative group">
                 <FolderCard

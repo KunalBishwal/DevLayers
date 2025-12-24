@@ -25,20 +25,6 @@ export function PrivacyToggle({ isPublic, onChange, className }: PrivacyTogglePr
         <span className="text-sm font-medium">Private</span>
       </button>
 
-      <div
-        className={cn(
-          "relative w-12 h-7 rounded-full cursor-pointer transition-colors duration-300",
-          isPublic ? "bg-primary" : "bg-secondary",
-        )}
-        onClick={() => onChange(!isPublic)}
-      >
-        <div
-          className={cn(
-            "absolute top-1 w-5 h-5 rounded-full bg-white shadow-md transition-all duration-300 ease-out",
-            isPublic ? "left-6" : "left-1",
-          )}
-        />
-      </div>
 
       <button
         onClick={() => onChange(true)}

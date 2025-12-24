@@ -21,6 +21,12 @@ export interface IncomingFriendRequest {
   status: FriendRequestStatus
 }
 
+//for delete friend response
+export interface DeleteFriendResponse {
+  message: string
+  request_id: number
+}
+
 // ===============================
 // API FUNCTIONS
 // ===============================
@@ -95,6 +101,33 @@ export const getFriendRequests = async (
 
   if (!res.ok) {
     throw new Error("Failed to fetch friend requests")
+  }
+
+  return res.json()
+}
+
+
+/**
+ * Reject / cancel friend request OR unfriend
+ * DELETE /friends/{request_id}
+ */
+export const deleteFriendRequest = async (
+  requestId: number,
+  token: string
+): Promise<DeleteFriendResponse> => {
+  const res = await fetch(
+    `${API_BASE_URL}/friends/${requestId}`,
+    {
+      method: "DELETE",
+      headers: {
+        accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  )
+
+  if (!res.ok) {
+    throw new Error("Failed to delete friend request")
   }
 
   return res.json()
