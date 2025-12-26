@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -12,9 +12,10 @@ import { cn } from "@/app/lib/utils"
 import { Search, TrendingUp, Clock, X, FolderOpen, FileText, Users, Hash, Loader2, AlertCircle, ArrowRight } from "lucide-react"
 import Link from "next/link"
 
-// Import API function and Types
+// Import API functions and Types
 import { searchContent } from "../../lib/api/search_api" 
 import type { SearchResponse, Post } from "../../lib/api/search_api"
+import { recordPostViews } from "@/app/lib/api/postview_api"
 
 const trendingSearches = [
   { query: "AI integration", count: "2.4k" },
@@ -43,6 +44,59 @@ export default function SearchPage() {
     users: [],
     posts: []
   })
+
+
+  // --- Post View Tracking Logic ---
+  const [pendingViews, setPendingViews] = useState<number[]>([]);
+  const viewedPostIds = useRef<Set<number>>(new Set());
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  useEffect(() => {
+    if (pendingViews.length === 0) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem("token") || ""; 
+        await recordPostViews(pendingViews, token);
+        setPendingViews([]); 
+      } catch (err) {
+        console.error("Failed to record post views:", err);
+      }
+    }, 6000);//every 6 seconds if there are pending views and no new post scrolled into view then send the request
+
+    return () => clearTimeout(timeoutId);
+  }, [pendingViews]);
+
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      const visibleIds: number[] = [];
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const postId = Number(entry.target.getAttribute("data-post-id"));
+          if (postId && !viewedPostIds.current.has(postId)) {
+            viewedPostIds.current.add(postId);
+            visibleIds.push(postId);
+          }
+        }
+      });
+
+      if (visibleIds.length > 0) {
+        setPendingViews((prev) => [...prev, ...visibleIds]);
+      }
+    }, { threshold: 0.5 });
+
+    const targets = document.querySelectorAll(".post-observer-target");
+    targets.forEach((t) => observerRef.current?.observe(t));
+
+    return () => observerRef.current?.disconnect();
+  }, [results]); 
+  // --- End View Tracking Logic ---
+
+
+
+
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -143,7 +197,6 @@ export default function SearchPage() {
 
         {!hasSearched ? (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Recent Searches */}
             {recentSearchList.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -165,7 +218,6 @@ export default function SearchPage() {
               </div>
             )}
 
-            {/* Trending Section */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -192,7 +244,6 @@ export default function SearchPage() {
                 </div>
               </div>
 
-              {/* Popular Tags */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Hash className="w-4 h-4 text-primary" />
@@ -236,7 +287,6 @@ export default function SearchPage() {
               </div>
             ) : (
               <Tabs defaultValue="all" className="w-full">
-                {/* Responsive Scrollable Tab List */}
                 <div className="overflow-x-auto pb-2 scrollbar-hide">
                   <TabsList className="w-max sm:w-full inline-flex justify-start sm:justify-center bg-muted/50 p-1 border border-border/50">
                     <TabsTrigger value="all" className="px-5">All</TabsTrigger>
@@ -252,21 +302,10 @@ export default function SearchPage() {
                   </TabsList>
                 </div>
 
-                {/* Empty State */}
-                {results.folders.length === 0 && results.posts.length === 0 && results.users.length === 0 && (
-                   <div className="text-center py-24 border-2 border-dashed border-border rounded-3xl mt-6">
-                      <div className="bg-muted w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Search className="w-8 h-8 text-muted-foreground/50" />
-                      </div>
-                      <p className="text-muted-foreground font-medium">No results matched "{results.query}"</p>
-                      <Button variant="link" onClick={handleClear} className="mt-2 text-primary">Clear and try again</Button>
-                   </div>
-                )}
-
-                {/* Content Tabs */}
                 <div className="mt-8">
                   {/* === ALL TAB === */}
                   <TabsContent value="all" className="space-y-10 focus-visible:ring-0">
+                    {/* USERS SECTION */}
                     {results.users.length > 0 && (
                       <section className="space-y-4">
                         <div className="flex items-center justify-between">
@@ -295,6 +334,7 @@ export default function SearchPage() {
                       </section>
                     )}
 
+                    {/* FOLDERS SECTION */}
                     {results.folders.length > 0 && (
                       <section className="space-y-4">
                         <h3 className="font-bold text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -314,6 +354,7 @@ export default function SearchPage() {
                       </section> 
                     )}
 
+                    {/*  POSTS SECTION WITH OBSERVER */}
                     {results.posts.length > 0 && (
                       <section className="space-y-4 pb-12">
                         <h3 className="font-bold text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
@@ -321,31 +362,33 @@ export default function SearchPage() {
                         </h3>
                         <div className="space-y-6">
                           {results.posts.map((post) => (
-                            <PostCard 
-                              key={post.id} 
-                              id={post.id.toString()}
-                              day={post.id}
-                              title={post.title}
-                              content={post.body}
-                              author={{ name: post.author.name, avatar: post.author.profile_photo_url }}
-                              date={new Date(post.created_at).toLocaleDateString()}
-                              links={getPostLinks(post).links}
-                              hasImage={post.images && post.images.length > 0}
-                              imageUrl={post.images?.[0]?.url}
-                              tags={Array.isArray(post.tags) ? post.tags : post.tags ? [post.tags] : []}
-                              likes={post.likes_count}
-                              dislikes={post.dislikes_count}
-                              comments={post.comments_count}
-                              folder_id={post.folder_id}
-                              folder_name={post.folder_id ? "Go to Folder" : null} 
-                            />
+                            <div key={post.id} className="post-observer-target" data-post-id={post.id}>
+                              <PostCard 
+                                id={post.id.toString()}
+                                day={post.id}
+                                title={post.title}
+                                content={post.body}
+                                author={{ name: post.author.name, avatar: post.author.profile_photo_url }}
+                                date={new Date(post.created_at).toLocaleDateString()}
+                                links={getPostLinks(post).links}
+                                hasImage={post.images && post.images.length > 0}
+                                imageUrl={post.images?.[0]?.url}
+                                tags={Array.isArray(post.tags) ? post.tags : post.tags ? [post.tags] : []}
+                                likes={post.likes_count}
+                                dislikes={post.dislikes_count}
+                                comments={post.comments_count}
+                                folder_id={post.folder_id}
+                                folder_name={post.folder_id ? "Go to Folder" : null} 
+                                views={post.views_count}
+                              />
+                            </div>
                           ))}
                         </div>
                       </section>
                     )}
                   </TabsContent>
 
-                  {/* === OTHER TABS === */}
+                  {/* === FOLDERS TAB === */}
                   <TabsContent value="folders" className="focus-visible:ring-0">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {results.folders.map((folder) => (
@@ -354,29 +397,32 @@ export default function SearchPage() {
                     </div>
                   </TabsContent>
 
+                  {/* === POSTS TAB === */}
                   <TabsContent value="posts" className="space-y-6 focus-visible:ring-0">
                     {results.posts.map((post) => (
-                      <PostCard 
-                        key={post.id} 
-                        id={post.id.toString()}
-                        day={post.id}
-                        views={post.views_count}
-                        title={post.title}
-                        content={post.body}
-                        author={{ name: post.author.name, avatar: post.author.profile_photo_url }}
-                        date={new Date(post.created_at).toLocaleDateString()}
-                        links={getPostLinks(post).links}
-                        hasImage={post.images && post.images.length > 0}
-                        imageUrl={post.images?.[0]?.url}
-                        tags={Array.isArray(post.tags) ? post.tags : post.tags ? [post.tags] : []}
-                        likes={post.likes_count}
-                        comments={post.comments_count}
-                        folder_id={post.folder_id}
-                        folder_name={post.folder_id ? "Go to Folder" : null}
-                      />
+                      <div key={post.id} className="post-observer-target" data-post-id={post.id}>
+                        <PostCard 
+                          id={post.id.toString()}
+                          day={post.id}
+                          views={post.views_count}
+                          title={post.title}
+                          content={post.body}
+                          author={{ name: post.author.name, avatar: post.author.profile_photo_url }}
+                          date={new Date(post.created_at).toLocaleDateString()}
+                          links={getPostLinks(post).links}
+                          hasImage={post.images && post.images.length > 0}
+                          imageUrl={post.images?.[0]?.url}
+                          tags={Array.isArray(post.tags) ? post.tags : post.tags ? [post.tags] : []}
+                          likes={post.likes_count}
+                          comments={post.comments_count}
+                          folder_id={post.folder_id}
+                          folder_name={post.folder_id ? "Go to Folder" : null}
+                        />
+                      </div>
                     ))}
                   </TabsContent>
 
+                  {/* === USERS TAB === */}
                   <TabsContent value="users" className="focus-visible:ring-0">
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                       {results.users.map((user) => (

@@ -2,13 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { 
-  fetchUserProfile, 
-  fetchUserSocials, 
-  fetchUserFolders, 
-  UserProfile, 
-  SocialLink, 
-  Folder 
+import {
+  fetchUserProfile,
+  fetchUserSocials,
+  fetchUserFolders,
+  UserProfile,
+  SocialLink,
+  Folder,
 } from "../app/lib/api/user_api"
 
 interface UserContextType {
@@ -21,22 +21,39 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
 
+const USER_CACHE_KEY = "user_cache_v2"
+
+interface UserCache {
+  user: UserProfile
+  socials: SocialLink[]
+  folders: Folder[]
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  
-  // Initialize state with data from localStorage (if it exists)
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem("user_cache")
-      return saved ? JSON.parse(saved) : null
-    }
-    return null
-  })
-  
+
+  const [user, setUser] = useState<UserProfile | null>(null)
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
-  const [isLoading, setIsLoading] = useState(!user) // Only load if we don't have cached user
+  const [isLoading, setIsLoading] = useState(true)
 
+  /* =======================
+     LOAD FROM CACHE
+  ======================= */
+  useEffect(() => {
+    const cached = localStorage.getItem(USER_CACHE_KEY)
+    if (cached) {
+      const parsed: UserCache = JSON.parse(cached)
+      setUser(parsed.user)
+      setSocialLinks(parsed.socials)
+      setFolders(parsed.folders)
+      setIsLoading(false)
+    }
+  }, [])
+
+  /* =======================
+     LOAD FROM BACKEND (ONLY IF NEEDED)
+  ======================= */
   const loadData = async () => {
     const token = localStorage.getItem("token")
     if (!token) {
@@ -45,53 +62,59 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // 1. Fetch Profile
+      setIsLoading(true)
+
       const profileData = await fetchUserProfile(token)
 
       if (!profileData) {
-        // Token expired? Clear everything.
         localStorage.removeItem("token")
-        localStorage.removeItem("user_cache") // Clear cache
+        localStorage.removeItem(USER_CACHE_KEY)
         setUser(null)
         router.push("/login")
         return
       }
 
-      // UPDATE STATE AND CACHE
-      setUser(profileData)
-      localStorage.setItem("user_cache", JSON.stringify(profileData)) // <--- SAVE TO LOCAL STORAGE
-
-      // 2. Fetch dependencies
-      const [socialsData, foldersData] = await Promise.all([
+      const [socials, folders] = await Promise.all([
         fetchUserSocials(profileData.id, token),
-        fetchUserFolders(profileData.id, token)
+        fetchUserFolders(profileData.id, token),
       ])
 
-      setSocialLinks(socialsData)
-      setFolders(foldersData)
+      const cache: UserCache = {
+        user: profileData,
+        socials,
+        folders,
+      }
 
-    } catch (error) {
-      console.error("Context load failed", error)
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(cache))
+
+      setUser(profileData)
+      setSocialLinks(socials)
+      setFolders(folders)
+    } catch (err) {
+      console.error("User context load failed", err)
     } finally {
       setIsLoading(false)
     }
   }
 
+  /* =======================
+     FETCH ONLY IF NO CACHE
+  ======================= */
   useEffect(() => {
-    loadData()
+    const cached = localStorage.getItem(USER_CACHE_KEY)
+    if (!cached) {
+      loadData()
+    }
   }, [])
 
-
-
   return (
-    <UserContext.Provider 
-      value={{ 
-        user, 
-        socialLinks, 
-        folders, 
-        isLoading, 
-        refreshUser: loadData, // Call this to reload data without refreshing page
-       
+    <UserContext.Provider
+      value={{
+        user,
+        socialLinks,
+        folders,
+        isLoading,
+        refreshUser: loadData,
       }}
     >
       {children}
@@ -100,9 +123,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useUser() {
-  const context = useContext(UserContext)
-  if (context === undefined) {
-    throw new Error("useUser must be used within a UserProvider")
-  }
-  return context
+  const ctx = useContext(UserContext)
+  if (!ctx) throw new Error("useUser must be used within UserProvider")
+  return ctx
 }

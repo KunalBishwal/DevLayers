@@ -1,204 +1,347 @@
 "use client"
 
+import { useState, useEffect, useRef, useCallback } from "react"
 import { PostCard } from "@/components/devlayers/post-card"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, TrendingUp, Clock, Sparkles } from "lucide-react"
-import { useState, useEffect } from "react"
-import Link from "next/link"
+import { Button } from "@/components/ui/button" 
+import { recordPostViews } from "@/app/lib/api/postview_api"
+import {useRouter } from "next/navigation"
+import {
+  TrendingUp,
+  Clock,
+  Loader2,
+  RefreshCcw,
+  Inbox,
+  Sparkles,
+  Zap,
+} from "lucide-react"
+import {
+  fetchUserFeed,
+  fetchTrendingPosts,
+  FeedPost,
+} from "@/app/lib/api/feed_api"
 
-const mockPosts = [
-  {
-    id: "1",
-    day: 67,
-    title: "Finally understood React Server Components!",
-    content:
-      "After weeks of confusion, today everything clicked. The key insight: think of RSCs as a way to render components on the server while keeping interactivity where needed. Here's my mental model...",
-    author: { name: "Priya Sharma", username: "priyasharma", avatar: "/indian-woman-developer-priya.jpg" },
-    date: "2 hours ago",
-    likes: 142,
-    comments: 24,
-    hasGithubLink: true,
-    tags: ["react", "nextjs", "server-components"],
-    isLiked: false,
-  },
-  {
-    id: "2",
-    day: 34,
-    title: "Building a design system from scratch",
-    content:
-      "Day 34 of my design system journey. Today I focused on creating accessible form components. The key is to handle all the edge cases: error states, loading states, disabled states...",
-    author: { name: "Arjun Patel", username: "arjunpatel", avatar: "/indian-man-programmer-arjun.jpg" },
-    date: "5 hours ago",
-    likes: 89,
-    comments: 12,
-    hasImage: true,
-    imageUrl: "/design-system-components-dark-mode.jpg",
-    tags: ["design-system", "accessibility", "tailwind"],
-    isLiked: true,
-  },
-  {
-    id: "3",
-    day: 12,
-    title: "Rust ownership model finally makes sense",
-    content:
-      "Coming from JavaScript, the Rust ownership model was the hardest concept to grasp. But today, after building a small CLI tool, I finally get it. Here's how I think about it...",
-    author: { name: "Vikram Reddy", username: "vikramreddy", avatar: "/indian-man-developer-vikram.jpg" },
-    date: "Yesterday",
-    likes: 234,
-    comments: 45,
-    hasGithubLink: true,
-    tags: ["rust", "systems-programming", "cli"],
-    isBookmarked: true,
-  },
-  {
-    id: "4",
-    day: 45,
-    title: "Implementing real-time features with WebSockets",
-    content:
-      "Added real-time collaboration to my SaaS project today. The stack: Socket.io on the backend, React hooks on the frontend. Key learnings about handling reconnection and state sync...",
-    author: { name: "Ananya Krishnan", username: "ananyak", avatar: "/indian-woman-tech-professional-ananya.jpg" },
-    date: "2 days ago",
-    likes: 67,
-    comments: 8,
-    tags: ["websockets", "real-time", "saas"],
-  },
-  {
-    id: "5",
-    day: 28,
-    title: "Migrating from REST to GraphQL",
-    content:
-      "Completed the migration of our main API from REST to GraphQL. The type safety and query flexibility has been a game changer for our frontend team...",
-    author: { name: "Rahul Verma", username: "rahulverma", avatar: "/indian-man-software-engineer-rahul.jpg" },
-    date: "3 days ago",
-    likes: 156,
-    comments: 32,
-    hasGithubLink: true,
-    tags: ["graphql", "api", "typescript"],
-  },
-]
+/* =======================
+   SUB-COMPONENT: EMPTY STATE
+======================= */
+const EmptyState = ({ 
+  icon: Icon, 
+  title, 
+  description, 
+  action 
+}: { 
+  icon: any, 
+  title: string, 
+  description: string, 
+  action?: React.ReactNode 
+}) => (
+  <div className="flex flex-col items-center justify-center py-20 px-4 text-center border-2 border-dashed border-muted rounded-xl bg-muted/10">
+    <div className="p-4 bg-background rounded-full shadow-sm mb-4">
+      <Icon className="w-8 h-8 text-muted-foreground" />
+    </div>
+    <h3 className="text-xl font-semibold mb-2">{title}</h3>
+    <p className="text-muted-foreground max-w-xs mb-6">
+      {description}
+    </p>
+    {action}
+  </div>
+)
 
-const trendingTags = ["react", "typescript", "nextjs", "rust", "ai", "design-system", "saas", "learning"]
+/* =======================
+   CACHE CONFIG
+======================= */
+const CACHE_KEY = "devlayers_explore_cache_v4"
+const TRENDING_TTL = 5 * 60 * 1000
+const FEED_TTL = 30 * 60 * 1000
+const PAGE_SIZE = 10
+
+interface ExploreCache {
+  trending: { posts: FeedPost[]; fetchedAt: number }
+  feed: {
+    posts: FeedPost[]
+    offset: number
+    hasMore: boolean
+    fetchedAt: number
+  }
+}
 
 export default function ExplorePage() {
-  const [scrollY, setScrollY] = useState(0)
-  const [searchQuery, setSearchQuery] = useState("")
+  const router = useRouter()
+  const [trendingPosts, setTrendingPosts] = useState<FeedPost[]>([])
+  const [feedPosts, setFeedPosts] = useState<FeedPost[]>([])
+  const [feedOffset, setFeedOffset] = useState(0)
+  const [feedHasMore, setFeedHasMore] = useState(true)
+
+  const [activeTab, setActiveTab] = useState("trending")
+  const [loadingTrending, setLoadingTrending] = useState(false)
+  const [loadingFeed, setLoadingFeed] = useState(false)
+
+  const observerRef = useRef<HTMLDivElement | null>(null)
+  const fetchingRef = useRef(false)
+  const mountedRef = useRef(false)
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+
+  const readCache = (): ExploreCache | null => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  }
+
+  const writeCache = (cache: ExploreCache) => {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
+  }
+
+  const loadTrending = useCallback(async (force = false) => {
+    if (!token) return
+    const cache = readCache()
+    const now = Date.now()
+
+    if (!force && cache?.trending.posts.length && now - cache.trending.fetchedAt < TRENDING_TTL) {
+      setTrendingPosts(cache.trending.posts)
+      return
+    }
+
+    setLoadingTrending(true)
+    const posts = await fetchTrendingPosts(token, 10)
+    writeCache({
+      trending: { posts, fetchedAt: now },
+      feed: cache?.feed ?? { posts: [], offset: 0, hasMore: true, fetchedAt: 0 },
+    })
+    setTrendingPosts(posts)
+    setLoadingTrending(false)
+  }, [token])
+
+  const loadFeed = useCallback(async (offset: number, force = false) => {
+    if (!token) return
+    if (fetchingRef.current) return
+    if (!force && !feedHasMore) return
+
+    const cache = readCache()
+    const now = Date.now()
+
+    if (!force && offset === 0 && cache?.feed.posts.length && now - cache.feed.fetchedAt < FEED_TTL) {
+      setFeedPosts(cache.feed.posts)
+      setFeedOffset(cache.feed.offset)
+      setFeedHasMore(cache.feed.hasMore)
+      return
+    }
+
+    fetchingRef.current = true
+    setLoadingFeed(true)
+    const newPosts = await fetchUserFeed(token, PAGE_SIZE, offset)
+
+    setFeedPosts(prev => {
+      const ids = new Set(prev.map(p => p.id))
+      return [...prev, ...newPosts.filter(p => !ids.has(p.id))]
+    })
+
+    const nextOffset = offset + PAGE_SIZE
+    const hasMore = newPosts.length > 0
+
+    writeCache({
+      trending: cache?.trending ?? { posts: [], fetchedAt: 0 },
+      feed: {
+        posts: [...(cache?.feed.posts ?? []), ...newPosts],
+        offset: nextOffset,
+        hasMore,
+        fetchedAt: now,
+      },
+    })
+
+    setFeedOffset(nextOffset)
+    setFeedHasMore(hasMore)
+    setLoadingFeed(false)
+    fetchingRef.current = false
+  }, [token, feedHasMore])
 
   useEffect(() => {
-    const handleScroll = () => setScrollY(window.scrollY)
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
+    if (mountedRef.current) return
+    mountedRef.current = true
+    const cache = readCache()
+    const now = Date.now()
 
-  const filteredPosts = searchQuery
-    ? mockPosts.filter(
-        (post) =>
-          post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          post.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())),
-      )
-    : mockPosts
+    if (cache) {
+      setTrendingPosts(cache.trending.posts)
+      setFeedPosts(cache.feed.posts)
+      setFeedOffset(cache.feed.offset)
+      setFeedHasMore(cache.feed.hasMore)
+    }
+
+    if (!cache || now - cache.trending.fetchedAt > TRENDING_TTL) loadTrending()
+    if (!cache || now - cache.feed.fetchedAt > FEED_TTL) loadFeed(0)
+  }, [loadTrending, loadFeed])
+
+  useEffect(() => {
+    if (activeTab !== "recent" || !feedHasMore) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && !fetchingRef.current) loadFeed(feedOffset)
+    })
+    if (observerRef.current) observer.observe(observerRef.current)
+    return () => observer.disconnect()
+  }, [activeTab, feedOffset, feedHasMore, loadFeed])
+
+  const handleRefresh = async () => {
+    localStorage.removeItem(CACHE_KEY)
+    setTrendingPosts([])
+    setFeedPosts([])
+    setFeedOffset(0)
+    setFeedHasMore(true)
+    await loadTrending(true)
+    await loadFeed(0, true)
+  }
+
+  const renderPost = (post: FeedPost) => (
+
+  <div key={post.id} className="post-observer-target" data-post-id={post.id}>{/* for tracking if post seen by user for views  */}
+
+    <PostCard
+      day={post.id}
+      key={post.id}
+      id={post.id.toString()}
+      title={post.title}
+      content={post.body || ""}
+      author={{
+        name: post.author?.name || "Anonymous",
+        avatar: post.author?.profile_photo_url || "",
+      }}
+      date={new Date(post.created_at).toLocaleDateString()}
+      tags={Array.isArray(post.tags) ? post.tags : []}
+      likes={post.likes_count}
+      dislikes={post.dislikes_count}
+      comments={post.comments_count}
+      views={post.views_count}
+      hasImage={post.images?.length > 0}
+      imageUrl={post.images?.[0]?.url}
+      links={post.links}
+      folder_id={post.folder_id}
+    />
+    
+  </div>
+  )
+
+
+
+    // --- Post View Tracking Logic ---
+    const [pendingViews, setPendingViews] = useState<number[]>([]);
+    const viewedPostIds = useRef<Set<number>>(new Set());
+    const observerRefer = useRef<IntersectionObserver | null>(null);
+  
+    useEffect(() => {
+      if (pendingViews.length === 0) return;
+  
+      const timeoutId = setTimeout(async () => {
+        try {
+          const token = localStorage.getItem("token") || ""; 
+          await recordPostViews(pendingViews, token);
+          setPendingViews([]); 
+        } catch (err) {
+          console.error("Failed to record post views:", err);
+        }
+      }, 6000);//every 6 seconds if there are pending views and no new post scrolled into view then send the request
+  
+      return () => clearTimeout(timeoutId);
+    }, [pendingViews]);
+  
+    useEffect(() => {
+      if (observerRefer.current) observerRefer.current.disconnect();
+  
+      observerRefer.current = new IntersectionObserver((entries) => {
+        const visibleIds: number[] = [];
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const postId = Number(entry.target.getAttribute("data-post-id"));
+            if (postId && !viewedPostIds.current.has(postId)) {
+              viewedPostIds.current.add(postId);
+              visibleIds.push(postId);
+            }
+          }
+        });
+  
+        if (visibleIds.length > 0) {
+          setPendingViews((prev) => [...prev, ...visibleIds]);
+        }
+      }, { threshold: 0.5 });
+  
+      const targets = document.querySelectorAll(".post-observer-target");
+      targets.forEach((t) => observerRefer.current?.observe(t));
+  
+      return () => observerRefer.current?.disconnect();
+    }, [trendingPosts, feedPosts]); 
+    // --- End View Tracking Logic ---
+
+
+  
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold">Explore</h1>
-        <p className="text-muted-foreground">Discover learning journeys and projects from the developer community</p>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <Input
-            placeholder="Search posts, folders, and users..."
-            className="pl-10 h-12"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        {/* Trending tags */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-muted-foreground flex items-center gap-1">
-            <TrendingUp className="w-4 h-4" />
-            Trending:
-          </span>
-          {trendingTags.map((tag) => (
-            <Badge
-              key={tag}
-              variant="secondary"
-              className="cursor-pointer hover:bg-primary/20 transition-colors"
-              onClick={() => setSearchQuery(tag)}
-            >
-              #{tag}
-            </Badge>
-          ))}
+    <div className="p-6 max-w-4xl mx-auto space-y-8">
+      {/* HEADER */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Explore</h1>
+          <p className="text-muted-foreground">Discover what the community is building.
+               <button 
+                  onClick={() => handleRefresh()} // Pass true to bypass cache
+                  disabled={loadingTrending || loadingFeed}
+                  className={`${loadingTrending || loadingFeed ? 'animate-spin' : ''} hover:bg-gray-100 p-1 rounded-full transition-colors disabled:opacity-50`}>
+                  <RefreshCcw className="w-3 h-3 text-blue-600" />
+                </button>
+          </p>
         </div>
       </div>
 
-      {/* Feed tabs */}
-      <Tabs defaultValue="trending">
-        <TabsList>
+      <Tabs defaultValue="trending" onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
           <TabsTrigger value="trending" className="gap-2">
-            <TrendingUp className="w-4 h-4" />
-            Trending
+            <TrendingUp className="w-4 h-4" /> Trending
           </TabsTrigger>
           <TabsTrigger value="recent" className="gap-2">
-            <Clock className="w-4 h-4" />
-            Recent
-          </TabsTrigger>
-          <TabsTrigger value="following" className="gap-2">
-            <Sparkles className="w-4 h-4" />
-            Following
+            <Clock className="w-4 h-4" /> Feed
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="trending" className="mt-6 space-y-6 stagger-children">
-          {filteredPosts.map((post) => (
-            <PostCard key={post.id} {...post} />
-          ))}
+        {/* TRENDING CONTENT */}
+        <TabsContent value="trending" className="mt-6 space-y-4">
+          {loadingTrending ? (
+            <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-primary" /></div>
+          ) : trendingPosts.length > 0 ? (
+            trendingPosts.map(renderPost)
+          ) : (
+            <EmptyState 
+              icon={Sparkles}
+              title="Nothing's trending yet"
+              description="Be the first to create a post that captures the community's attention."
+              action={<Button onClick={()=>{router.push("/create")}}>Create Post</Button>}
+            />
+          )}
         </TabsContent>
 
-        <TabsContent value="recent" className="mt-6 space-y-6 stagger-children">
-          {filteredPosts
-            .slice()
-            .reverse()
-            .map((post) => (
-              <PostCard key={post.id} {...post} />
-            ))}
-        </TabsContent>
-
-        <TabsContent value="following" className="mt-6">
-          <div className="text-center py-12 text-muted-foreground">
-            <p>Follow developers to see their posts here</p>
-            <Link href="/search">
-              <Button variant="outline" className="mt-4 bg-transparent">
-                Discover Developers
-              </Button>
-            </Link>
-          </div>
+        {/* FEED CONTENT */}
+        <TabsContent value="recent" className="mt-6 space-y-4">
+          {feedPosts.length > 0 ? (
+            <>
+              {feedPosts.map(renderPost)}
+              <div ref={observerRef} className="py-10 text-center">
+                {loadingFeed ? (
+                  <Loader2 className="animate-spin mx-auto w-6 h-6 text-muted-foreground" />
+                ) : !feedHasMore && (
+                  <p className="text-sm text-muted-foreground">You&apos;ve reached the end of the feed.</p>
+                )}
+              </div>
+            </>
+          ) : !loadingFeed ? (
+            <EmptyState 
+              icon={Inbox}
+              title="Your feed is quiet"
+              description="Follow other developers to see their latest updates and projects here."
+              action={<Button variant="secondary" onClick={() => { router.push("/search"); }}>Find People to Follow</Button>}
+            />
+          ) : (
+            <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-primary" /></div>
+          )}
         </TabsContent>
       </Tabs>
-
-      {/* Floating day indicator */}
-      <div
-        className={`fixed right-8 top-1/2 -translate-y-1/2 transition-opacity duration-300 hidden lg:block ${
-          scrollY > 200 ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
-      >
-        <div className="flex flex-col gap-2 p-2 rounded-xl bg-card/80 backdrop-blur-sm border border-border shadow-lg">
-          {filteredPosts.map((post) => (
-            <button
-              key={post.id}
-              className="w-8 h-8 rounded-lg bg-secondary hover:bg-primary/20 flex items-center justify-center text-xs font-mono transition-colors"
-              title={`Day ${post.day}: ${post.title}`}
-            >
-              {post.day}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

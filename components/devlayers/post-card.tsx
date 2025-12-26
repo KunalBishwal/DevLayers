@@ -45,7 +45,7 @@ import {
 } from '../../app/lib/api/reactions_api'
 
 import { createBookmark } from "@/app/lib/api/bookmarks_api"; 
-import { toast } from "sonner" // Using sonner as it's cleaner for high-density UIs
+import { toast } from "sonner" 
 
 interface LinkItem {
   label: string
@@ -81,7 +81,7 @@ interface PostCardProps {
   showActions?: boolean
   onEdit?: () => void
   onDelete?: () => void
-  isbookmark_card?: boolean
+  isbookmark_card?: boolean//this was added to differentiate between bookmark card and normal post card for delete/edit action
 }
 
 export function PostCard({
@@ -225,9 +225,9 @@ export function PostCard({
     const token = localStorage.getItem("token") || ""
     try {
       await createBookmark(Number(id), token)
-      toast.success("Added to bookmarks")
+      alert("Added to bookmarks")
     } catch (error: any) {
-      toast.error(error.message || "Failed to bookmark")
+      alert(error.message || "Failed to bookmark")
     }
   }
 

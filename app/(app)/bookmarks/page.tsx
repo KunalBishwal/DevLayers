@@ -80,9 +80,9 @@ export default function BookmarksPage() {
       // Update cache so deleted item doesn't reappear on reload
       localStorage.setItem(CACHE_KEY, JSON.stringify(updatedList));
       
-      toast.success("Bookmark removed");
+      alert("Bookmark removed");
     } catch (error: any) {
-      toast.error("Failed to remove bookmark");
+      alert("Failed to remove bookmark");
     }
   };
 
